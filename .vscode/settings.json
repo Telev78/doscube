@@ -1,0 +1,17 @@
+{
+    "dosbox.windows.installPath": "F:\\DOSBox-X",
+    "dosbox.windows.executableName": "dosbox-x.exe",
+    "dosbox.windows.configPath": "${config:dosbox.windows.installPath}\\vscode.conf",
+    "dosbox.linux.binaryName": "dosbox",
+    "dosbox.linux.configPath": "${userHome}/.config/dosbox/vscode.conf",
+    "files.encoding": "utf8",
+    "[cpp]": {
+        "files.encoding": "cp850"
+    },
+    "[c]": {
+        "files.encoding": "cp850"
+    },
+    "[makefile]": {
+        "files.encoding": "cp850"
+    }
+}

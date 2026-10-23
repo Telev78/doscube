@@ -1,0 +1,33 @@
+{
+    "configurations": [
+        {
+            "name": "BorlandDOS",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/BORLANDC/INCLUDE"
+            ],
+            "defines": [
+                "__MSDOS__",
+                "__TURBOC__=0x0310",
+                "_cdecl=",
+                "cdecl=",
+                "interrupt=",
+                "far=",
+                "near=",
+                "pascal="
+            ],
+            "compilerPath": "",
+            "cStandard": "c89",
+            "cppStandard": "c++98",
+            "intelliSenseMode": "windows-msvc-x86",
+            "browse": {
+                "path": [
+                    "${workspaceFolder}",
+                    "${workspaceFolder}/BORLANDC/INCLUDE"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            }
+        }
+    ],
+    "version": 4
+}

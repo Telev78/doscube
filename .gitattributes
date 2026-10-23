@@ -1,0 +1,6 @@
+*.c text working-tree-encoding=cp850 eol=crlf
+*.cpp text working-tree-encoding=cp850 eol=crlf
+*.h text working-tree-encoding=cp850 eol=crlf
+*.hpp text working-tree-encoding=cp850 eol=crlf
+[Mm]akefile text working-tree-encoding=cp850 eol=crlf
+*.mak text working-tree-encoding=cp850 eol=crlf

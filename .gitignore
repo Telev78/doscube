@@ -1,0 +1,14 @@
+
+build/*
+BORLANDC/
+PROJECT/*.dsk
+
+*.obj
+
+# --- Exécutables finaux ---
+*.EXE
+LOG.TXT
+
+# --- Fichiers Système ---
+.DS_Store
+Thumbs.db

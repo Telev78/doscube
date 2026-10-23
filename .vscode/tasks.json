@@ -1,0 +1,195 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Préparer l'environnement de build",
+            "type": "shell",
+            "windows": {
+                "command": "powershell",
+                "args": [
+                    "-Command",
+                    "if (-not (Test-Path 'BORLANDC')) { Write-Host '[ERREUR] Le dossier BORLANDC est introuvable !' -ForegroundColor Red; exit 1 }; if (-not (Test-Path 'build')) { New-Item -ItemType Directory -Path 'build' | Out-Null }"
+                ]
+            },
+            "linux": {
+                "command": "bash",
+                "args": [
+                    "-c", "if [ ! -d \"BORLANDC\" ] && [ ! -d \"borlandc\" ]; then echo \"[ERREUR] Le dossier BORLANDC est introuvable !\"; exit 1; fi; mkdir -p build"
+                ]
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Compiler sous Borland C++ 3.1 - DEBUG (DOSBox)",
+            "type": "shell",
+            "dependsOn": "Préparer l'environnement de build",
+            "windows": {
+                "command": "${config:dosbox.windows.installPath}\\${config:dosbox.windows.executableName}",
+                "args": [
+                    "-conf", "${config:dosbox.windows.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make -DDEBUG > ..\\build\\log.txt",
+                    "-c", "type ..\\build\\log.txt",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "linux": {
+                "command": "${config:dosbox.linux.binaryName}",
+                "args": [
+                    "-conf", "${config:dosbox.linux.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make -DDEBUG > ..\\build\\log.txt",
+                    "-c", "type ..\\build\\log.txt",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Compiler sous Borland C++ 3.1 - RELEASE (DOSBox)",
+            "type": "shell",
+            "dependsOn": "Préparer l'environnement de build",
+            "windows": {
+                "command": "${config:dosbox.windows.installPath}\\${config:dosbox.windows.executableName}",
+                "args": [
+                    "-conf", "${config:dosbox.windows.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make > ..\\build\\log.txt",
+                    "-c", "type ..\\build\\log.txt",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "linux": {
+                "command": "${config:dosbox.linux.binaryName}",
+                "args": [
+                    "-conf", "${config:dosbox.linux.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make > ..\\build\\log.txt",
+                    "-c", "type ..\\build\\log.txt",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Exécuter l'application DOS",
+            "type": "shell",
+            "windows": {
+                "command": "${config:dosbox.windows.installPath}\\${config:dosbox.windows.executableName}",
+                "args": [
+                    "-conf", "${config:dosbox.windows.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd build",
+                    "-c", "DosCube.EXE",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "linux": {
+                "command": "${config:dosbox.linux.binaryName}",
+                "args": [
+                    "-conf", "${config:dosbox.linux.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd build",
+                    "-c", "DosCube.EXE",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Nettoyer le projet DOS (Clean)",
+            "type": "shell",
+            "windows": {
+                "command": "${config:dosbox.windows.installPath}\\${config:dosbox.windows.executableName}",
+                "args": [
+                    "-conf", "${config:dosbox.windows.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make clean",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "linux": {
+                "command": "${config:dosbox.linux.binaryName}",
+                "args": [
+                    "-conf", "${config:dosbox.linux.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd project",
+                    "-c", "make clean",
+                    "-c", "pause",
+                    "-c", "exit"
+                ]
+            },
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "Ouvre DOS",
+            "type": "shell",
+            "windows": {
+                "command": "${config:dosbox.windows.installPath}\\${config:dosbox.windows.executableName}",
+                "args": [
+                    "-conf", "${config:dosbox.windows.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd build"
+                ]
+            },
+            "linux": {
+                "command": "${config:dosbox.linux.binaryName}",
+                "args": [
+                    "-conf", "${config:dosbox.linux.configPath}",
+                    "-c", "mount c \"${workspaceFolder}\"",
+                    "-c", "set PATH=%PATH%;c:\\borlandc\\bin",
+                    "-c", "c:",
+                    "-c", "cd build"
+                ]
+            },
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        }
+    ]
+}
