@@ -17,17 +17,9 @@ int computeMove(const RubikCube &cube, int owner, int f, int dx, int dy,
     int pos[3], v[3], t, a = -1, b;
     double best = -1.0, sx, sy, len, d, dirSign = 1.0;
 
-    if (owner < 20)
-    {
-        pos[0] = cube.pieces[owner].currentPos.x;
-        pos[1] = cube.pieces[owner].currentPos.y;
-        pos[2] = cube.pieces[owner].currentPos.z;
-    }
-    else
-    {
-        pos[0] = pos[1] = pos[2] = 0;
-        pos[n] = ns;
-    } // centre fixe
+    pos[0] = cube.pieces[owner].currentPos.x;
+    pos[1] = cube.pieces[owner].currentPos.y;
+    pos[2] = cube.pieces[owner].currentPos.z;
 
     for (t = 0; t < 3; t++)
     {
@@ -52,8 +44,6 @@ int computeMove(const RubikCube &cube, int owner, int f, int dx, int dy,
 
     b = 3 - n - a; // axe de rotation = l'autre axe tangent
     layer = pos[b];
-    if (layer == 0)
-        return 0; // tranche centrale : pas encore gérée
     axis = b;
     // vitesse = ? × r  =>  s = dirSign * ns * ?(b, n, a)
     sign = (int)dirSign * ns * levi(b, n, a);

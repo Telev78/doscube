@@ -18,5 +18,6 @@ void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAn
 int pickFace(int px, int py, int &owner, int &faceIdx);
 void projectDir(int ax, int ay, int az, double angleX, double angleY, double &sx, double &sy);
 void drawCursor(int x, int y);
+void drawText(int x, int y, const char *str, unsigned char color);
 
 #endif

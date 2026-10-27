@@ -1,5 +1,6 @@
 #include <math.h>
 #include <mem.h>
+#include <dos.h>
 #include "renderer.h"
 
 // Déclaration externe obligatoire du tampon partagé (défini dans main.cpp)
@@ -322,8 +323,8 @@ void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAn
     double cx, cy, cz, sumZ, avgZ;
     double rotPts[4][3];
 
-    // 1. Rendu des 20 cubies mobiles
-    for (i = 0; i < 20; i++)
+    // 1. Rendu des 26 cubies mobiles
+    for (i = 0; i < 26; i++)
     {
 
         cx = cube.pieces[i].currentPos.x * spacing;
@@ -392,73 +393,7 @@ void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAn
         }
     }
 
-    // 2. Rendu des 6 centres fixes
-    static double centerPos[6][3] = {
-        {0.0, spacing, 0.0},
-        {0.0, -spacing, 0.0},
-        {-spacing, 0.0, 0.0},
-        {spacing, 0.0, 0.0},
-        {0.0, 0.0, spacing},
-        {0.0, 0.0, -spacing}};
-    unsigned char centerColors[6] = {COLOR_WHITE, COLOR_YELLOW, COLOR_ORANGE, COLOR_RED, COLOR_GREEN, COLOR_BLUE};
-
-    for (c = 0; c < 6; c++)
-    {
-        cx = centerPos[c][0];
-        cy = centerPos[c][1];
-        cz = centerPos[c][2];
-        f = c;
-
-        double nx = faceNormals[f][0] * hs;
-        double ny = faceNormals[f][1] * hs;
-        double nz = faceNormals[f][2] * hs;
-
-        double nx1 = nx * cosY - nz * sinY;
-        double nz1 = nx * sinY + nz * cosY;
-        double ny1 = ny;
-
-        double rz_n = ny1 * sinX + nz1 * cosX;
-
-        if (rz_n < 0)
-            continue;
-
-        sumZ = 0;
-        for (v = 0; v < 4; v++)
-        {
-            double lx = cx + faceTemplates[f][v][0] * hs;
-            double ly = cy + faceTemplates[f][v][1] * hs;
-            double lz = cz + faceTemplates[f][v][2] * hs;
-
-            double x1 = lx * cosY - lz * sinY;
-            double z1 = lx * sinY + lz * cosY;
-            double y1 = ly;
-
-            rotPts[v][0] = x1;
-            rotPts[v][1] = y1 * cosX - z1 * sinX;
-            rotPts[v][2] = y1 * sinX + z1 * cosX;
-            sumZ += rotPts[v][2];
-        }
-
-        avgZ = sumZ / 4.0;
-
-        if (faceCount < 130)
-        {
-            facesToDraw[faceCount].color = getMode13Color(centerColors[c]);
-            facesToDraw[faceCount].avgZ = avgZ;
-
-            for (v = 0; v < 4; v++)
-            {
-                facesToDraw[faceCount].owner = 20 + c;
-                facesToDraw[faceCount].faceIdx = c;
-                facesToDraw[faceCount].pts[v * 2] = centerX + (int)rotPts[v][0];
-                // Correction d'aspect 4/3 appliquée sur l'axe Y (facteur 5.0 / 6.0)
-                facesToDraw[faceCount].pts[v * 2 + 1] = centerY - (int)(rotPts[v][1] * 5.0 / 6.0);
-            }
-            faceCount++;
-        }
-    }
-
-    // 3. Tri par insertion des faces visibles
+    // 2. Tri par insertion des faces visibles
     for (a = 0; a < faceCount - 1; a++)
     {
         for (b = a + 1; b < faceCount; b++)
@@ -472,7 +407,7 @@ void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAn
         }
     }
 
-    // 4. Dessin de toutes les faces visibles triées
+    // 3. Dessin de toutes les faces visibles triées
     for (i = 0; i < faceCount; i++)
     {
         fillQuad(facesToDraw[i].pts, facesToDraw[i].color);
@@ -528,5 +463,34 @@ void drawCursor(int x, int y)
             backBuffer[(long)y * 320L + x + i] = 15;
         if (y + i >= 0 && y + i < 200 && x >= 0 && x < 320)
             backBuffer[(long)(y + i) * 320L + x] = 15;
+    }
+}
+
+void drawText(int x, int y, const char *str, unsigned char color)
+{
+    unsigned char far *font = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
+    int row, bit, px, py;
+    unsigned char bits;
+
+    while (*str)
+    {
+        for (row = 0; row < 8; row++)
+        {
+            py = y + row;
+            if (py < 0 || py >= 200)
+                continue;
+            bits = font[(unsigned)(unsigned char)*str * 8 + row];
+            for (bit = 0; bit < 8; bit++)
+            {
+                if (bits & (0x80 >> bit))
+                {
+                    px = x + bit;
+                    if (px >= 0 && px < 320)
+                        backBuffer[(long)py * 320L + px] = color;
+                }
+            }
+        }
+        x += 8;
+        str++;
     }
 }

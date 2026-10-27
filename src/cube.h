@@ -35,7 +35,7 @@ struct Cubie
 // 4. Structure globale du jeu
 struct RubikCube
 {
-    Cubie pieces[20];       // 8 coins + 12 arêtes
+    Cubie pieces[26];       // 8 coins + 12 arêtes + 6 centres
     unsigned int moveCount; // Nombre de rotations effectuées
     int isMixed;            // Status du mélange (0: résolu, 1: mélangé)
 

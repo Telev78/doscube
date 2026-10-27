@@ -90,6 +90,7 @@ int main()
     int mouseX, mouseY, leftBtn;
     int prevMouseX = -1, prevMouseY = -1;
     int dragging = 0;
+    char moveText[32];
 
     LayerAnim anim = {0, 0, 0, 0, 0, 12};
     int viewDrag = 0, faceDrag = 0, moveDone = 1;
@@ -102,8 +103,14 @@ int main()
         px = mouseX / 2;
         py = mouseY;
 
-        // Échap : break (et non return) pour restaurer le mode texte
-
+        if (kbhit())
+        {
+            char key = getch();
+            if (key == 27)
+            {
+                break;
+            }
+        }
         // --- Clic droit : rotation de la vue ---
         if (right)
         {
@@ -159,6 +166,8 @@ int main()
 
         _fmemset(backBuffer, 0, 64000);
         drawCube(myCube, angleX, angleY, &anim);
+        sprintf(moveText, "Coups : %u", myCube.moveCount);
+        drawText(4, 4, moveText, 15);
         drawCursor(px, py);
         blitBuffer();
     }
