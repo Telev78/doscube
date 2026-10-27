@@ -14,6 +14,9 @@ struct Point2D
 Point2D project3DTo2D(int x, int y, int z, double angleX, double angleY, int centerX, int centerY, int scale);
 
 // Fonction principale pour dessiner le cube complet à l'écran
-void drawCube(const RubikCube &cube, double angleX, double angleY);
+void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAnim *anim = 0);
+int pickFace(int px, int py, int &owner, int &faceIdx);
+void projectDir(int ax, int ay, int az, double angleX, double angleY, double &sx, double &sy);
+void drawCursor(int x, int y);
 
 #endif

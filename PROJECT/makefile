@@ -10,6 +10,7 @@ BGI      = $(BC_PATH)\BGI
 
 # Indique à Borland Make où chercher les fichiers sources .cpp
 .path.cpp = $(SRC_DIR)
+.autodepend
 
 # Par défaut, si DEBUG n'est pas défini, on est en Release
 !ifdef DEBUG
@@ -24,7 +25,8 @@ TARGET = $(BUILD_DIR)\doscube.exe
 BUILD_OBJS = $(BUILD_DIR)\main.obj \
 			 $(BUILD_DIR)\cube.obj \
  			 $(BUILD_DIR)\renderer.obj \
-			 $(BUILD_DIR)\mouse.obj
+			 $(BUILD_DIR)\mouse.obj \
+			 $(BUILD_DIR)\control.obj
 
 # 1. RÈGLE DE LIAISON FINALE
 $(TARGET): $(BUILD_OBJS)

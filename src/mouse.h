@@ -11,6 +11,6 @@ void showMouseCursor();
 void hideMouseCursor();
 
 // Récupération de l'état et de la position de la souris (AX = 0x0003)
-void getMouseStatus(int &x, int &y, int &leftButton);
+void getMouseStatus(int &x, int &y, int &leftButton, int &rightButton);
 
 #endif

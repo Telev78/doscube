@@ -45,5 +45,19 @@ struct RubikCube
 };
 
 void initCube(RubikCube &cube);
+// Fonctions de rotation des faces
+void rotateX(RubikCube &cube, int targetX, int clockwise);
+void rotateY(RubikCube &cube, int targetY, int clockwise);
+void rotateZ(RubikCube &cube, int targetZ, int clockwise);
+struct LayerAnim
+{
+    int active;
+    int axis;
+    int layer;
+    int sign;
+    int step;
+    int steps;
+};
+void rotateLayer(RubikCube &cube, int axis, int layer, int sign);
 
 #endif

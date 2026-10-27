@@ -33,6 +33,8 @@ struct Face3D
     unsigned char color;
     double avgZ;
     int pts[8];
+    int owner;
+    int faceIdx;
 };
 
 // --- RASTERISEUR DE TRIANGLES PLEINS POUR LE BACK-BUFFER ---
@@ -237,21 +239,67 @@ void fillQuad(int pts[8], unsigned char color)
     }
 }
 
+static Face3D facesToDraw[130];
+static int faceCount = 0;
+
+// Coordonnée d'un point selon l'axe (0=X, 1=Y, 2=Z)
+static int coordOf(const Point3D &p, int axis)
+{
+    if (axis == 0)
+        return p.x;
+    if (axis == 1)
+        return p.y;
+    return p.z;
+}
+
+// Rotation d'un point autour d'un axe (c = cos, s = sin de l'angle)
+static void rotAxis(double &x, double &y, double &z, int axis, double c, double s)
+{
+    double t;
+    if (axis == 0)
+    {
+        t = y * c - z * s;
+        z = y * s + z * c;
+        y = t;
+    }
+    else if (axis == 1)
+    {
+        t = x * c + z * s;
+        z = -x * s + z * c;
+        x = t;
+    }
+    else
+    {
+        t = x * c - y * s;
+        y = x * s + y * c;
+        x = t;
+    }
+}
+
 // Fonction principale de rendu du cube dans le back-buffer (avec correction d'aspect 4/3)
-void drawCube(const RubikCube &cube, double angleX, double angleY)
+void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAnim *anim)
 {
     int centerX = 160;
     int centerY = 100;
     double spacing = 28.0;
     double hs = spacing * 0.42;
 
-    static Face3D facesToDraw[130];
-    int faceCount = 0;
-
     double radX = angleX * 3.14159265 / 180.0;
     double radY = angleY * 3.14159265 / 180.0;
     double cosX = cos(radX), sinX = sin(radX);
     double cosY = cos(radY), sinY = sin(radY);
+
+    int animating = (anim != 0 && anim->active);
+    int inLayer = 0;
+    double ac = 1.0, as = 0.0, th;
+    if (animating)
+    {
+        th = anim->sign * 1.5707963 * anim->step / anim->steps;
+        ac = cos(th);
+        as = sin(th);
+    }
+
+    faceCount = 0;
 
     static const signed char faceTemplates[6][4][3] = {
         {{-1, 1, -1}, {1, 1, -1}, {1, 1, 1}, {-1, 1, 1}},     // 0: Haut
@@ -277,6 +325,7 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
     // 1. Rendu des 20 cubies mobiles
     for (i = 0; i < 20; i++)
     {
+
         cx = cube.pieces[i].currentPos.x * spacing;
         cy = cube.pieces[i].currentPos.y * spacing;
         cz = cube.pieces[i].currentPos.z * spacing;
@@ -290,6 +339,9 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
             double nx = faceNormals[f][0] * hs;
             double ny = faceNormals[f][1] * hs;
             double nz = faceNormals[f][2] * hs;
+
+            if (inLayer)
+                rotAxis(nx, ny, nz, anim->axis, ac, as);
 
             double nx1 = nx * cosY - nz * sinY;
             double nz1 = nx * sinY + nz * cosY;
@@ -307,6 +359,9 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
                 double ly = cy + faceTemplates[f][v][1] * hs;
                 double lz = cz + faceTemplates[f][v][2] * hs;
 
+                if (inLayer)
+                    rotAxis(lx, ly, lz, anim->axis, ac, as);
+
                 double x1 = lx * cosY - lz * sinY;
                 double z1 = lx * sinY + lz * cosY;
                 double y1 = ly;
@@ -321,6 +376,8 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
 
             if (faceCount < 130)
             {
+                facesToDraw[faceCount].owner = i;
+                facesToDraw[faceCount].faceIdx = f;
                 facesToDraw[faceCount].color = getMode13Color(col);
                 facesToDraw[faceCount].avgZ = avgZ;
 
@@ -391,6 +448,8 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
 
             for (v = 0; v < 4; v++)
             {
+                facesToDraw[faceCount].owner = 20 + c;
+                facesToDraw[faceCount].faceIdx = c;
                 facesToDraw[faceCount].pts[v * 2] = centerX + (int)rotPts[v][0];
                 // Correction d'aspect 4/3 appliquée sur l'axe Y (facteur 5.0 / 6.0)
                 facesToDraw[faceCount].pts[v * 2 + 1] = centerY - (int)(rotPts[v][1] * 5.0 / 6.0);
@@ -417,5 +476,57 @@ void drawCube(const RubikCube &cube, double angleX, double angleY)
     for (i = 0; i < faceCount; i++)
     {
         fillQuad(facesToDraw[i].pts, facesToDraw[i].color);
+    }
+}
+
+static int pointInQuad(const int pts[8], int px, int py)
+{
+    int i, j, pos = 0, neg = 0;
+    long cr;
+    for (i = 0; i < 4; i++)
+    {
+        j = (i + 1) % 4;
+        cr = (long)(pts[j * 2] - pts[i * 2]) * (py - pts[i * 2 + 1]) - (long)(pts[j * 2 + 1] - pts[i * 2 + 1]) * (px - pts[i * 2]);
+        if (cr > 0)
+            pos = 1;
+        else if (cr < 0)
+            neg = 1;
+    }
+    return !(pos && neg);
+}
+
+// Les faces sont triées de l'arrière vers l'avant : on parcourt à l'envers
+int pickFace(int px, int py, int &owner, int &faceIdx)
+{
+    int i;
+    for (i = faceCount - 1; i >= 0; i--)
+        if (pointInQuad(facesToDraw[i].pts, px, py))
+        {
+            owner = facesToDraw[i].owner;
+            faceIdx = facesToDraw[i].faceIdx;
+            return 1;
+        }
+    return 0;
+}
+
+// Projection écran (y vers le bas) d'un vecteur unité du modèle
+void projectDir(int ax, int ay, int az, double angleX, double angleY, double &sx, double &sy)
+{
+    double rx = angleX * 3.14159265 / 180.0, ry = angleY * 3.14159265 / 180.0;
+    double x1 = ax * cos(ry) - az * sin(ry);
+    double z1 = ax * sin(ry) + az * cos(ry);
+    sx = x1;
+    sy = -(ay * cos(rx) - z1 * sin(rx)) * 5.0 / 6.0;
+}
+
+void drawCursor(int x, int y)
+{
+    int i;
+    for (i = -3; i <= 3; i++)
+    {
+        if (x + i >= 0 && x + i < 320 && y >= 0 && y < 200)
+            backBuffer[(long)y * 320L + x + i] = 15;
+        if (y + i >= 0 && y + i < 200 && x >= 0 && x < 320)
+            backBuffer[(long)(y + i) * 320L + x] = 15;
     }
 }

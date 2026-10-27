@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <graphics.h>
 #include <math.h>
+#include "control.h"
 
 double normalizeAngle(double angle);
 
@@ -82,7 +83,6 @@ int main()
         cout << "Erreur : Souris non detectee !" << endl;
         return 1;
     }
-    showMouseCursor();
 
     double angleX = 30.0;
     double angleY = -45.0;
@@ -91,65 +91,78 @@ int main()
     int prevMouseX = -1, prevMouseY = -1;
     int dragging = 0;
 
-    while (!kbhit())
+    LayerAnim anim = {0, 0, 0, 0, 0, 12};
+    int viewDrag = 0, faceDrag = 0, moveDone = 1;
+    int owner, fIdx, startX = 0, startY = 0, prevX = 0, prevY = 0;
+    int px, py, left, right, dx, dy, axis, layer, sign;
+
+    while (1)
     {
-        getMouseStatus(mouseX, mouseY, leftBtn);
+        getMouseStatus(mouseX, mouseY, left, right);
+        px = mouseX / 2;
+        py = mouseY;
 
-        if (leftBtn)
+        // Échap : break (et non return) pour restaurer le mode texte
+
+        // --- Clic droit : rotation de la vue ---
+        if (right)
         {
-            if (!dragging)
+            if (viewDrag)
             {
-                dragging = 1;
-                prevMouseX = mouseX;
-                prevMouseY = mouseY;
+                angleY = normalizeAngle(angleY + (px - prevX) * 1.0);
+                angleX = normalizeAngle(angleX + (py - prevY) * 1.0);
             }
-            else
-            {
-                int deltaX = mouseX - prevMouseX;
-                int deltaY = mouseY - prevMouseY;
+            viewDrag = 1;
+            prevX = px;
+            prevY = py;
+        }
+        else
+            viewDrag = 0;
 
-                hideMouseCursor();
-                angleY += deltaX * 0.5;
-                angleX += deltaY * 0.5;
-                angleX = normalizeAngle(angleX);
-                angleY = normalizeAngle(angleY);
-                prevMouseX = mouseX;
-                prevMouseY = mouseY;
+        // --- Clic gauche : rotation d'une face ---
+        if (left && !right)
+        {
+            if (!faceDrag)
+            {
+                faceDrag = 1;
+                startX = px;
+                startY = py;
+                moveDone = anim.active || !pickFace(px, py, owner, fIdx);
+            }
+            else if (!moveDone)
+            {
+                dx = px - startX;
+                dy = py - startY;
+                if (abs(dx) + abs(dy) >= 8)
+                {
+                    if (computeMove(myCube, owner, fIdx, dx, dy, angleX, angleY, axis, layer, sign))
+                    {
+                        anim.active = 1;
+                        anim.step = 0;
+                        anim.axis = axis;
+                        anim.layer = layer;
+                        anim.sign = sign;
+                    }
+                    moveDone = 1;
+                }
             }
         }
         else
+            faceDrag = 0;
+
+        // --- Avancement de l'animation ---
+        if (anim.active && ++anim.step >= anim.steps)
         {
-            dragging = 0;
+            rotateLayer(myCube, anim.axis, anim.layer, anim.sign);
+            anim.active = 0;
         }
 
-        // --- DOUBLE BUFFERING ---
-        // A. Effacer le tampon arrière en noir
         _fmemset(backBuffer, 0, 64000);
-
-        // B. Dessiner le cube 3D dans le tampon
-        drawCube(myCube, angleX, angleY);
-
-        // C. Dessiner le HUD (ex: texte simple via BIOS ou directement sur le buffer)
-        // Note: En mode 13h, on peut afficher des messages texte via BIOS si besoin,
-        // ou dessiner le HUD. Pour l'instant, le buffer s'occupe de tout afficher d'un coup.
-
-        // D. Envoyer instantanément le tampon à l'écran (zéro clignotement !)
-        hideMouseCursor();
+        drawCube(myCube, angleX, angleY, &anim);
+        drawCursor(px, py);
         blitBuffer();
-        char angleBuffer[64];
-
-        // Formatage et affichage de angleX (Ligne 2, Colonne 2)
-        sprintf(angleBuffer, "Angle X: %.1f", angleX);
-        printText(2, 2, angleBuffer, 15); // 15 = Blanc brillant
-
-        // Formatage et affichage de angleY (Ligne 3, Colonne 2)
-        sprintf(angleBuffer, "Angle Y: %.1f", angleY);
-        printText(2, 3, angleBuffer, 15);
-
-        showMouseCursor();
     }
 
-    hideMouseCursor();
     closeMode13h();
     return 0;
 }

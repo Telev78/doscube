@@ -107,7 +107,6 @@
                     "-c", "c:",
                     "-c", "cd build",
                     "-c", "DosCube.EXE",
-                    "-c", "pause",
                     "-c", "exit"
                 ]
             },
@@ -120,7 +119,6 @@
                     "-c", "c:",
                     "-c", "cd build",
                     "-c", "DosCube.EXE",
-                    "-c", "pause",
                     "-c", "exit"
                 ]
             },

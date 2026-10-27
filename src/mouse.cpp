@@ -29,7 +29,7 @@ void hideMouseCursor()
 }
 
 // 4. Obtenir la position (X, Y) et l'état du clic (AX = 0x0003)
-void getMouseStatus(int &x, int &y, int &leftButton)
+void getMouseStatus(int &x, int &y, int &leftButton, int &rightButton)
 {
     REGS inRegs, outRegs;
     inRegs.x.ax = 0x0003;
@@ -38,4 +38,5 @@ void getMouseStatus(int &x, int &y, int &leftButton)
     x = outRegs.x.cx;                 // Coordonnée horizontale X
     y = outRegs.x.dx;                 // Coordonnée verticale Y
     leftButton = outRegs.x.bx & 0x01; // Bit 0 de BX = état du bouton gauche (1 = cliqué, 0 = relâché)
+    rightButton = (outRegs.x.bx >> 1) & 0x01;
 }
