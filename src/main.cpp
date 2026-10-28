@@ -1,5 +1,5 @@
 #include <dos.h>
-#include <mem.h> // Pour _fmemcpy / _fmemset
+#include <mem.h>
 #include <conio.h>
 #include <iostream.h>
 #include <stdio.h>
@@ -11,11 +11,12 @@
 #include <math.h>
 #include "control.h"
 
-int normalizeAngle(int angle);
-
 // Tableau de 64 000 octets alloué en mémoire lointaine (far) pour éviter le dépassement de segment
 unsigned char far backBuffer[320UL * 200UL];
+
+// Taille de la pile à 16ko
 extern unsigned _stklen = 16384U;
+
 // Basculer en Mode 13h (320x200, 256 couleurs) via interruption BIOS 0x10
 void initMode13h()
 {
@@ -81,9 +82,6 @@ int main()
         return 1;
     }
 
-    double angleX = 30.0;
-    double angleY = 315;
-
     int mouseX, mouseY, leftBtn;
     int prevMouseX = -1, prevMouseY = -1;
     int dragging = 0;
@@ -114,10 +112,9 @@ int main()
         // --- Clic droit : rotation de la vue ---
         if (right)
         {
-            if (viewDrag)
+            if (viewDrag && (px != prevX || py != prevY))
             {
-                angleY = normalizeAngle(angleY + (px - prevX));
-                angleX = normalizeAngle(angleX + (py - prevY));
+                rotateView(DRAG_X_SIGN * (px - prevX), DRAG_Y_SIGN * (py - prevY));
                 viewChanged = 1;
             }
             viewDrag = 1;
@@ -143,7 +140,7 @@ int main()
                 dy = py - startY;
                 if (abs(dx) + abs(dy) >= 8)
                 {
-                    if (computeMove(myCube, owner, fIdx, dx, dy, angleX, angleY, axis, layer, sign))
+                    if (computeMove(myCube, owner, fIdx, dx, dy, axis, layer, sign))
                     {
                         anim.active = 1;
                         anim.step = 0;
@@ -172,7 +169,7 @@ int main()
         {
             // 1. Dessin dans le back-buffer (zone cube + zone texte seulement)
             clearRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
-            drawCube(myCube, angleX, angleY, &anim);
+            drawCube(myCube, &anim);
 
             clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
             sprintf(moveText, "Coups : %u", myCube.moveCount);
@@ -198,13 +195,4 @@ int main()
 
     closeMode13h();
     return 0;
-}
-
-// Ramène tout angle en degrés dans l'intervalle [0, 360[
-int normalizeAngle(int angle)
-{
-    angle %= 360;
-    if (angle < 0)
-        angle += 360;
-    return angle;
 }

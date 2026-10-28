@@ -2,5 +2,5 @@
 #define CONTROL_H
 
 int computeMove(const RubikCube &cube, int owner, int f, int dx, int dy,
-                int angleX, int angleY, int &axis, int &layer, int &sign);
+                int &axis, int &layer, int &sign);
 #endif

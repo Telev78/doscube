@@ -11,7 +11,7 @@ static int levi(int i, int j, int k) // signe de la permutation (i,j,k) de {0,1,
 }
 
 int computeMove(const RubikCube &cube, int owner, int f, int dx, int dy,
-                int angleX, int angleY, int &axis, int &layer, int &sign)
+                int &axis, int &layer, int &sign)
 {
     int n = faceAxis[f], ns = faceSign[f];
     int pos[3], v[3], t, a = -1, b;
@@ -27,7 +27,7 @@ int computeMove(const RubikCube &cube, int owner, int f, int dx, int dy,
             continue;
         v[0] = v[1] = v[2] = 0;
         v[t] = 1;
-        projectDir(v[0], v[1], v[2], angleX, angleY, sx, sy);
+        projectDir(v[0], v[1], v[2], sx, sy);
         len = sqrt(sx * sx + sy * sy);
         if (len < 0.2)
             continue; // axe quasi vu de bout : direction peu fiable

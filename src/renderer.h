@@ -24,11 +24,19 @@ void drawText(int x, int y, const char *str, unsigned char color);
 /* Retrouve la face coloree situee sous le pixel (px, py) */
 int pickFace(int px, int py, int &owner, int &faceIdx);
 
-/* Projection ecran (y vers le bas) d'un vecteur unite du modele.
-   Les angles sont des degres entiers. */
-void projectDir(int ax, int ay, int az, int angleX, int angleY, double &sx, double &sy);
+/* Sens des glissements de souris pour la rotation de la vue :
+   1 = la face tournee vers nous suit le pointeur, -1 = sens inverse */
+#define DRAG_X_SIGN 1
+#define DRAG_Y_SIGN 1
 
-/* Rendu du cube dans le back-buffer (arithmetique entiere, angles en degres entiers) */
-void drawCube(const RubikCube &cube, int angleX, int angleY, const LayerAnim *anim = 0);
+/* Orientation de la vue (trackball) */
+void resetView(int angleX, int angleY);
+void rotateView(int dx, int dy);
+
+/* Projection ecran (y vers le bas) d'un vecteur unite du modele */
+void projectDir(int ax, int ay, int az, double &sx, double &sy);
+
+/* Rendu du cube dans le back-buffer (arithmetique entiere) */
+void drawCube(const RubikCube &cube, const LayerAnim *anim = 0);
 
 #endif

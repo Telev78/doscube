@@ -53,7 +53,7 @@ static const signed char faceTemplates[6][4][3] = {
 unsigned rowOffset[200]; /* rowOffset[y] = y * 320 */
 
 /* ------------------------------------------------------------------ */
-/* Trigonometrie en point fixe 8.8 (table de 360 entrees)             */
+/* Trigonometrie en point fixe (table Q14 de 360 entrees)              */
 /* ------------------------------------------------------------------ */
 
 static int sinTab[360];
@@ -65,7 +65,7 @@ static void initTrig()
 
     /* Seulement 91 appels a sin() : le reste vient des symetries */
     for (a = 0; a <= 90; a++)
-        q[a] = (int)(sin(a * 3.14159265 / 180.0) * 256.0 + 0.5);
+        q[a] = (int)(sin(a * 3.14159265 / 180.0) * 16384.0 + 0.5);
 
     for (a = 0; a < 360; a++)
     {
@@ -80,7 +80,8 @@ static void initTrig()
     }
 }
 
-static int sinI(int a)
+/* Version Q14 (1.0 = 16384) */
+static int sinQ(int a)
 {
     a %= 360;
     if (a < 0)
@@ -88,9 +89,20 @@ static int sinI(int a)
     return sinTab[a];
 }
 
+static int cosQ(int a)
+{
+    return sinQ(a + 90);
+}
+
+/* Version 8.8 (1.0 = 256) */
+static int sinI(int a)
+{
+    return (sinQ(a) + 32) >> 6;
+}
+
 static int cosI(int a)
 {
-    return sinI(a + 90);
+    return (cosQ(a) + 32) >> 6;
 }
 
 void initRenderer()
@@ -99,6 +111,7 @@ void initRenderer()
     for (y = 0; y < 200; y++)
         rowOffset[y] = (unsigned)y * 320U;
     initTrig();
+    resetView(30, 315);
 }
 
 /* ------------------------------------------------------------------ */
@@ -215,10 +228,123 @@ static void buildVecs(int m[3][3], ViewVecs &v)
         v.vis[f] = (faceSign[f] * m[2][faceAxis[f]] > 0);
 }
 
-void projectDir(int ax, int ay, int az, int angleX, int angleY, double &sx, double &sy)
+/* ------------------------------------------------------------------ */
+/* Orientation de la vue : matrice cumulee en Q14 (trackball)         */
+/* Un glissement horizontal tourne toujours autour de l'axe vertical  */
+/* de l'ECRAN, un glissement vertical autour de son axe horizontal,   */
+/* quelle que soit l'orientation actuelle du cube.                    */
+/* ------------------------------------------------------------------ */
+
+static int viewM[3][3]; /* Q14 : 1.0 = 16384 */
+
+static void mulQ14(int a[3][3], int b[3][3], int out[3][3])
+{
+    int i, j, k;
+    long sum;
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+        {
+            sum = 0;
+            for (k = 0; k < 3; k++)
+                sum += (long)a[i][k] * b[k][j];
+            out[i][j] = (int)((sum + 8192L) >> 14);
+        }
+}
+
+/* Une iteration de Newton : M = 1.5*M - 0.5*(M*Mt)*M
+   ramene la matrice vers une vraie rotation (evite la derive d'arrondi) */
+static void orthoViewM()
+{
+    int a[3][3], t[3][3];
+    int i, j, k;
+    long sum;
+
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+        {
+            sum = 0;
+            for (k = 0; k < 3; k++)
+                sum += (long)viewM[i][k] * viewM[j][k];
+            a[i][j] = (int)((sum + 8192L) >> 14);
+        }
+
+    mulQ14(a, viewM, t);
+
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            viewM[i][j] = (int)((3L * viewM[i][j] - t[i][j]) >> 1);
+}
+
+/* Vue initiale a partir de deux angles (degres) */
+void resetView(int angleX, int angleY)
 {
     int m[3][3];
+    int i, j, n;
+
     buildViewMatrix(angleX, angleY, m);
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            viewM[i][j] = m[i][j] << 6; /* 8.8 -> Q14 */
+    for (n = 0; n < 3; n++)
+        orthoViewM();
+}
+
+/* Glissement de souris : dx pixels vers la droite, dy pixels vers le bas.
+   La face tournee vers nous suit le pointeur. */
+void rotateView(int dx, int dy)
+{
+    int cy, sy, cx, sx;
+    int ry[3][3], rx[3][3], d[3][3], n[3][3];
+    int i, j;
+
+    if (dx == 0 && dy == 0)
+        return;
+
+    cy = cosQ(dx);
+    sy = sinQ(dx); /* rotation autour de l'axe Y de l'ecran */
+    cx = cosQ(dy);
+    sx = sinQ(dy); /* rotation autour de l'axe X de l'ecran */
+
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+        {
+            ry[i][j] = (i == j) ? 16384 : 0;
+            rx[i][j] = (i == j) ? 16384 : 0;
+        }
+
+    ry[0][0] = cy;
+    ry[0][2] = sy;
+    ry[2][0] = -sy;
+    ry[2][2] = cy;
+
+    rx[1][1] = cx;
+    rx[1][2] = -sx;
+    rx[2][1] = sx;
+    rx[2][2] = cx;
+
+    mulQ14(rx, ry, d);
+    mulQ14(d, viewM, n);
+
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            viewM[i][j] = n[i][j];
+
+    orthoViewM();
+}
+
+/* Matrice de vue en 8.8 pour le rendu */
+static void viewToMatrix(int m[3][3])
+{
+    int i, j;
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            m[i][j] = (viewM[i][j] + 32) >> 6;
+}
+
+void projectDir(int ax, int ay, int az, double &sx, double &sy)
+{
+    int m[3][3];
+    viewToMatrix(m);
     sx = (ax * m[0][0] + ay * m[0][1] + az * m[0][2]) / 256.0;
     sy = -(ax * m[1][0] + ay * m[1][1] + az * m[1][2]) / 256.0 * 5.0 / 6.0;
 }
@@ -424,7 +550,7 @@ void drawText(int x, int y, const char *str, unsigned char color)
 /* Rendu du cube (entierement en entiers)                             */
 /* ------------------------------------------------------------------ */
 
-void drawCube(const RubikCube &cube, int angleX, int angleY, const LayerAnim *anim)
+void drawCube(const RubikCube &cube, const LayerAnim *anim)
 {
     int m[3][3], m2[3][3], r[3][3];
     ViewVecs vv, vv2;
@@ -439,7 +565,7 @@ void drawCube(const RubikCube &cube, int angleX, int angleY, const LayerAnim *an
     faceCount = 0;
 
     /* Matrice de vue, et matrice combinee pour la couche animee */
-    buildViewMatrix(angleX, angleY, m);
+    viewToMatrix(m);
     buildVecs(m, vv);
 
     animating = (anim != 0 && anim->active);
