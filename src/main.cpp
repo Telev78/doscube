@@ -3,12 +3,13 @@
 #include <conio.h>
 #include <iostream.h>
 #include <stdio.h>
-#include "cube.h"
-#include "mouse.h"
-#include "renderer.h"
 #include <stdlib.h>
 #include <graphics.h>
 #include <math.h>
+#include "cube.h"
+#include "mouse.h"
+#include "renderer.h"
+#include "common.h"
 #include "control.h"
 
 // Tableau de 64 000 octets alloué en mémoire lointaine (far) pour éviter le dépassement de segment
@@ -17,18 +18,56 @@ unsigned char far backBuffer[320UL * 200UL];
 // Taille de la pile à 16ko
 extern unsigned _stklen = 16384U;
 
-// Basculer en Mode 13h (320x200, 256 couleurs) via interruption BIOS 0x10
-void initMode13h()
+static int savedMode = 3;  // mode vidéo d'origine, à restaurer en sortant
+static int modeActive = 0; // 1 une fois le mode 13h activé
+static volatile int quitRequested = 0;
+
+int getVideoMode()
 {
-    _AX = 0x0013;
+    _AH = 0x0F;
     geninterrupt(0x10);
+    return _AL & 0x7F;
 }
 
-// Restaurer le mode texte standard du DOS
+// 1 si une carte VGA (ou MCGA) est présente
+int detectVGA()
+{
+    union REGS r;
+    r.x.ax = 0x1A00;
+    r.x.bx = 0;
+    int86(0x10, &r, &r);
+    if (r.h.al != 0x1A)
+        return 0; // fonction absente : EGA, CGA, MDA...
+    return (r.h.bl == 0x07 || r.h.bl == 0x08 ||
+            (r.h.bl >= 0x0A && r.h.bl <= 0x0C));
+}
+
+// Passe en mode 13h et vérifie que le BIOS l'a bien accepté
+int initMode13h()
+{
+    savedMode = getVideoMode();
+    _AX = 0x0013;
+    geninterrupt(0x10);
+    modeActive = (getVideoMode() == 0x13);
+    return modeActive;
+}
+
+// Restaure le mode d'origine (sans effet si le mode 13h n'a jamais été activé)
 void closeMode13h()
 {
-    _AX = 0x0003;
-    geninterrupt(0x10);
+    if (modeActive)
+    {
+        modeActive = 0;
+        _AX = savedMode; // AH = 0 (set mode), AL = ancien mode
+        geninterrupt(0x10);
+    }
+}
+
+// Ctrl+Break : on demande simplement la sortie propre de la boucle
+int ctrlBreakHandler()
+{
+    quitRequested = 1;
+    return 1; // 1 = continuer le programme
 }
 
 void waitVSync()
@@ -69,8 +108,19 @@ int main()
     initCube(myCube);
 
     // 1. Basculement en Mode 13h (320x200, 256 couleurs)
-    initMode13h();
+    if (!detectVGA())
+    {
+        printf("\n%s\n", STR_ERR_NO_VGA);
+        return 1;
+    }
 
+    if (!initMode13h())
+    {
+        printf("\n%s\n", STR_ERR_MODE13);
+        return 1;
+    }
+    atexit(closeMode13h); // restauration garantie, quelle que soit la sortie
+    ctrlbrk(ctrlBreakHandler);
     initRenderer();
 
     // 2. Initialisation de la souris
@@ -78,13 +128,17 @@ int main()
     if (numButtons == 0)
     {
         closeMode13h();
-        cout << "Erreur : Souris non detectee !" << endl;
+        printf("%s\n", STR_ERR_NO_MOUSE);
+        return 1;
+    }
+    if (numButtons != -1 && numButtons < 2)
+    {
+        closeMode13h();
+        printf("\n%s\n", STR_ERR_MOUSE_BUTTONS);
         return 1;
     }
 
     int mouseX, mouseY, leftBtn;
-    int prevMouseX = -1, prevMouseY = -1;
-    int dragging = 0;
     char moveText[32];
 
     LayerAnim anim = {0, 0, 0, 0, 0, 12};
@@ -95,7 +149,7 @@ int main()
     int viewChanged = 1; // 1 = forcer le premier affichage
     int redraw;
 
-    while (1)
+    while (!quitRequested)
     {
         getMouseStatus(mouseX, mouseY, left, right);
         px = mouseX / 2;
@@ -106,7 +160,7 @@ int main()
             char key = getch();
             if (key == 27)
             {
-                break;
+                quitRequested = 1;
             }
         }
         // --- Clic droit : rotation de la vue ---
@@ -172,7 +226,7 @@ int main()
             drawCube(myCube, &anim);
 
             clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
-            sprintf(moveText, "Coups : %u", myCube.moveCount);
+            sprintf(moveText, STR_MOVES, myCube.moveCount);
             drawText(4, 2, moveText, 15);
 
             // 2. Copie vers l'écran, synchronisée sur le retour vertical
@@ -193,6 +247,5 @@ int main()
         }
     }
 
-    closeMode13h();
     return 0;
 }
