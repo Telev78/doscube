@@ -11,7 +11,7 @@
 #include <math.h>
 #include "control.h"
 
-double normalizeAngle(double angle);
+int normalizeAngle(int angle);
 
 // Tableau de 64 000 octets alloué en mémoire lointaine (far) pour éviter le dépassement de segment
 unsigned char far backBuffer[320UL * 200UL];
@@ -30,17 +30,12 @@ void closeMode13h()
     geninterrupt(0x10);
 }
 
-// Copier le Back-buffer vers la mémoire vidéo (0xA0000)
-void blitBuffer()
+void waitVSync()
 {
-    // Synchronisation VSync pour éliminer tout artefact
     while (inportb(0x3DA) & 0x08)
         ;
     while (!(inportb(0x3DA) & 0x08))
         ;
-
-    // Copie globale des 64 000 octets d'un seul bloc (64000 < 65535, tient dans le segment 64Ko)
-    _fmemcpy((unsigned char far *)0xA0000000L, backBuffer, 64000);
 }
 
 // Affiche une chaîne de caractères à l'écran en Mode 13h via le BIOS
@@ -75,6 +70,8 @@ int main()
     // 1. Basculement en Mode 13h (320x200, 256 couleurs)
     initMode13h();
 
+    initRenderer();
+
     // 2. Initialisation de la souris
     int numButtons = initMouse();
     if (numButtons == 0)
@@ -85,7 +82,7 @@ int main()
     }
 
     double angleX = 30.0;
-    double angleY = -45.0;
+    double angleY = 315;
 
     int mouseX, mouseY, leftBtn;
     int prevMouseX = -1, prevMouseY = -1;
@@ -96,6 +93,9 @@ int main()
     int viewDrag = 0, faceDrag = 0, moveDone = 1;
     int owner, fIdx, startX = 0, startY = 0, prevX = 0, prevY = 0;
     int px, py, left, right, dx, dy, axis, layer, sign;
+    int lastPx = -1, lastPy = -1;
+    int viewChanged = 1; // 1 = forcer le premier affichage
+    int redraw;
 
     while (1)
     {
@@ -116,8 +116,9 @@ int main()
         {
             if (viewDrag)
             {
-                angleY = normalizeAngle(angleY + (px - prevX) * 1.0);
-                angleX = normalizeAngle(angleX + (py - prevY) * 1.0);
+                angleY = normalizeAngle(angleY + (px - prevX));
+                angleX = normalizeAngle(angleX + (py - prevY));
+                viewChanged = 1;
             }
             viewDrag = 1;
             prevX = px;
@@ -162,14 +163,37 @@ int main()
         {
             rotateLayer(myCube, anim.axis, anim.layer, anim.sign);
             anim.active = 0;
+            viewChanged = 1; // afficher l'état final
         }
 
-        _fmemset(backBuffer, 0, 64000);
-        drawCube(myCube, angleX, angleY, &anim);
-        sprintf(moveText, "Coups : %u", myCube.moveCount);
-        drawText(4, 4, moveText, 15);
-        drawCursor(px, py);
-        blitBuffer();
+        redraw = (anim.active || viewChanged);
+
+        if (redraw)
+        {
+            // 1. Dessin dans le back-buffer (zone cube + zone texte seulement)
+            clearRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
+            drawCube(myCube, angleX, angleY, &anim);
+
+            clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
+            sprintf(moveText, "Coups : %u", myCube.moveCount);
+            drawText(4, 2, moveText, 15);
+
+            // 2. Copie vers l'écran, synchronisée sur le retour vertical
+            waitVSync();
+            blitRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
+            blitRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
+            viewChanged = 0;
+        }
+
+        // 3. Curseur : on restaure l'ancien emplacement depuis le back-buffer,
+        //    puis on dessine le nouveau directement en VRAM
+        if (redraw || px != lastPx || py != lastPy)
+        {
+            blitRect(lastPx - 3, lastPy - 3, lastPx + 3, lastPy + 3);
+            drawCursorVRAM(px, py);
+            lastPx = px;
+            lastPy = py;
+        }
     }
 
     closeMode13h();
@@ -177,12 +201,10 @@ int main()
 }
 
 // Ramène tout angle en degrés dans l'intervalle [0, 360[
-double normalizeAngle(double angle)
+int normalizeAngle(int angle)
 {
-    angle = fmod(angle, 360.0);
-    if (angle < 0.0)
-    {
-        angle += 360.0;
-    }
+    angle %= 360;
+    if (angle < 0)
+        angle += 360;
     return angle;
 }

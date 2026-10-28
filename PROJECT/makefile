@@ -14,9 +14,9 @@ BGI      = $(BC_PATH)\BGI
 
 # Par défaut, si DEBUG n'est pas défini, on est en Release
 !ifdef DEBUG
-CFLAGS = -ml -v -y -O- -N $(INCLUDES)    # Model Large, Debug info, Pas d'optimisation
+CFLAGS = -mm -v -y -O- -N $(INCLUDES)   # Debug info, pas d'optimisation, test de pile
 !else
-CFLAGS = -ml -v- -O2 -vi -2 -y- $(INCLUDES) # Model Large, Pas de debug info, Optimisation vitesse
+CFLAGS = -mm -v- -O2 -G -vi -2 -d -y- $(INCLUDES)   # Medium, vitesse, code 286
 !endif
 
 TARGET = $(BUILD_DIR)\doscube.exe

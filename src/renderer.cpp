@@ -3,247 +3,226 @@
 #include <dos.h>
 #include "renderer.h"
 
-// Déclaration externe obligatoire du tampon partagé (défini dans main.cpp)
+/* Tampon partage, defini dans main.cpp */
 extern unsigned char far backBuffer[];
 
-// Correspondance des couleurs pour la palette 256 couleurs du Mode 13h
-unsigned char getMode13Color(unsigned char cubeColor)
+#define SPACING 28 /* distance entre deux cubies (pixels)            */
+#define HS 12      /* demi-taille d'un autocollant (pixels)          */
+#define CENTER_X 160
+#define CENTER_Y 100
+#define MAX_FACES 130
+
+/* ------------------------------------------------------------------ */
+/* Structures et donnees                                              */
+/* ------------------------------------------------------------------ */
+
+struct Face3D
+{
+    unsigned char color;
+    int z;       /* profondeur du centre de la face (8.8)  */
+    int owner;   /* index du cubie                         */
+    int faceIdx; /* 0..5 : Haut, Bas, Gauche, Droite, ...  */
+    int pts[8];  /* 4 sommets ecran                        */
+};
+
+/* Vecteurs des axes du modele, projetes pour une vue donnee (tout en 8.8) */
+struct ViewVecs
+{
+    int ux[3], uy[3], uz[3]; /* axes * SPACING (x ecran, y ecran, profondeur) */
+    int hx[3], hy[3], hz[3]; /* axes * HS                                     */
+    int vis[6];              /* face visible (1) ou cachee (0)                */
+};
+
+static Face3D facesToDraw[MAX_FACES];
+static int order[MAX_FACES];
+static int faceCount = 0;
+
+/* Axe (0=X 1=Y 2=Z) et sens de la normale de chaque face */
+static const signed char faceAxis[6] = {1, 1, 0, 0, 2, 2};
+static const signed char faceSign[6] = {1, -1, -1, 1, 1, -1};
+
+static const signed char faceTemplates[6][4][3] = {
+    {{-1, 1, -1}, {1, 1, -1}, {1, 1, 1}, {-1, 1, 1}},     /* 0: Haut    */
+    {{-1, -1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, -1, -1}}, /* 1: Bas     */
+    {{-1, -1, -1}, {-1, -1, 1}, {-1, 1, 1}, {-1, 1, -1}}, /* 2: Gauche  */
+    {{1, -1, -1}, {1, 1, -1}, {1, 1, 1}, {1, -1, 1}},     /* 3: Droite  */
+    {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}},     /* 4: Avant   */
+    {{1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, -1}}  /* 5: Arriere */
+};
+
+unsigned rowOffset[200]; /* rowOffset[y] = y * 320 */
+
+/* ------------------------------------------------------------------ */
+/* Trigonometrie en point fixe 8.8 (table de 360 entrees)             */
+/* ------------------------------------------------------------------ */
+
+static int sinTab[360];
+
+static void initTrig()
+{
+    int a;
+    int q[91];
+
+    /* Seulement 91 appels a sin() : le reste vient des symetries */
+    for (a = 0; a <= 90; a++)
+        q[a] = (int)(sin(a * 3.14159265 / 180.0) * 256.0 + 0.5);
+
+    for (a = 0; a < 360; a++)
+    {
+        if (a <= 90)
+            sinTab[a] = q[a];
+        else if (a <= 180)
+            sinTab[a] = q[180 - a];
+        else if (a <= 270)
+            sinTab[a] = -q[a - 180];
+        else
+            sinTab[a] = -q[360 - a];
+    }
+}
+
+static int sinI(int a)
+{
+    a %= 360;
+    if (a < 0)
+        a += 360;
+    return sinTab[a];
+}
+
+static int cosI(int a)
+{
+    return sinI(a + 90);
+}
+
+void initRenderer()
+{
+    int y;
+    for (y = 0; y < 200; y++)
+        rowOffset[y] = (unsigned)y * 320U;
+    initTrig();
+}
+
+/* ------------------------------------------------------------------ */
+/* Couleurs                                                           */
+/* ------------------------------------------------------------------ */
+
+static unsigned char getMode13Color(unsigned char cubeColor)
 {
     switch (cubeColor)
     {
     case COLOR_WHITE:
-        return 15; // Blanc brillant
+        return 15;
     case COLOR_YELLOW:
-        return 14; // Jaune
+        return 14;
     case COLOR_RED:
-        return 4; // Rouge
+        return 4;
     case COLOR_ORANGE:
-        return 41; // Orange
+        return 41;
     case COLOR_BLUE:
-        return 1; // Bleu
+        return 1;
     case COLOR_GREEN:
-        return 2; // Vert
+        return 2;
     default:
-        return 0; // Noir / Transparent
+        return 0;
     }
 }
 
-// Structure d'une face 3D projetée
-struct Face3D
+/* ------------------------------------------------------------------ */
+/* Matrices 3x3 en point fixe 8.8                                     */
+/* ------------------------------------------------------------------ */
+
+/* Matrice de vue : rotation Y puis rotation X (comme l'ancien code flottant) */
+static void buildViewMatrix(int angleX, int angleY, int m[3][3])
 {
-    unsigned char color;
-    double avgZ;
-    int pts[8];
-    int owner;
-    int faceIdx;
-};
+    int cX = cosI(angleX), sX = sinI(angleX);
+    int cY = cosI(angleY), sY = sinI(angleY);
 
-// --- RASTERISEUR DE TRIANGLES PLEINS POUR LE BACK-BUFFER ---
-void fillFlatBottomTriangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color)
-{
-    if (y1 == y2)
-        return;
-    float invslope1 = (float)(x2 - x1) / (y2 - y1);
-    float invslope2 = (float)(x3 - x1) / (y3 - y1);
-    float curx1 = x1;
-    float curx2 = x1;
+    m[0][0] = cY;
+    m[0][1] = 0;
+    m[0][2] = -sY;
 
-    for (int scany = y1; scany <= y2; scany++)
-    {
-        if (scany >= 0 && scany < 200)
-        {
-            int startx = (int)curx1;
-            int endx = (int)curx2;
-            if (startx > endx)
-            {
-                int t = startx;
-                startx = endx;
-                endx = t;
-            }
-            if (startx < 0)
-                startx = 0;
-            if (endx >= 320)
-                endx = 319;
+    m[1][0] = (int)(-((long)sY * sX) >> 8);
+    m[1][1] = cX;
+    m[1][2] = (int)(-((long)cY * sX) >> 8);
 
-            unsigned char *rowPtr = &backBuffer[(long)scany * 320L];
-            for (int x = startx; x <= endx; x++)
-            {
-                rowPtr[x] = color;
-            }
-        }
-        curx1 += invslope1;
-        curx2 += invslope2;
-    }
+    m[2][0] = (int)(((long)sY * cX) >> 8);
+    m[2][1] = sX;
+    m[2][2] = (int)(((long)cY * cX) >> 8);
 }
 
-void fillFlatTopTriangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color)
+/* Rotation d'une couche : +deg degres (regle de la main droite) autour de l'axe */
+static void buildLayerMatrix(int axis, int deg, int r[3][3])
 {
-    if (y1 == y3)
-        return;
-    float invslope1 = (float)(x3 - x1) / (y3 - y1);
-    float invslope2 = (float)(x3 - x2) / (y3 - y2);
-    float curx1 = x1;
-    float curx2 = x2;
+    int c = cosI(deg), s = sinI(deg);
+    int i, j;
 
-    for (int scany = y1; scany <= y3; scany++)
-    {
-        if (scany >= 0 && scany < 200)
-        {
-            int startx = (int)curx1;
-            int endx = (int)curx2;
-            if (startx > endx)
-            {
-                int t = startx;
-                startx = endx;
-                endx = t;
-            }
-            if (startx < 0)
-                startx = 0;
-            if (endx >= 320)
-                endx = 319;
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            r[i][j] = (i == j) ? 256 : 0;
 
-            unsigned char *rowPtr = &backBuffer[(long)scany * 320L];
-            for (int x = startx; x <= endx; x++)
-            {
-                rowPtr[x] = color;
-            }
-        }
-        curx1 += invslope1;
-        curx2 += invslope2;
-    }
-}
-
-void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3, unsigned char color)
-{
-    int tx, ty;
-    if (y1 > y2)
+    if (axis == 0)
     {
-        tx = x1;
-        x1 = x2;
-        x2 = tx;
-        ty = y1;
-        y1 = y2;
-        y2 = ty;
+        r[1][1] = c;
+        r[1][2] = -s;
+        r[2][1] = s;
+        r[2][2] = c;
     }
-    if (y1 > y3)
+    else if (axis == 1)
     {
-        tx = x1;
-        x1 = x3;
-        x3 = tx;
-        ty = y1;
-        y1 = y3;
-        y3 = ty;
-    }
-    if (y2 > y3)
-    {
-        tx = x2;
-        x2 = x3;
-        x3 = tx;
-        ty = y2;
-        y2 = y3;
-        y3 = ty;
-    }
-
-    if (y2 == y3)
-    {
-        fillFlatBottomTriangle(x1, y1, x2, y2, x3, y3, color);
-    }
-    else if (y1 == y2)
-    {
-        fillFlatTopTriangle(x1, y1, x2, y2, x3, y3, color);
+        r[0][0] = c;
+        r[0][2] = s;
+        r[2][0] = -s;
+        r[2][2] = c;
     }
     else
     {
-        int x4 = (int)(x1 + ((float)(y2 - y1) / (y3 - y1)) * (x3 - x1));
-        int y4 = y2;
-        fillFlatBottomTriangle(x1, y1, x2, y2, x4, y4, color);
-        fillFlatTopTriangle(x2, y2, x4, y4, x3, y3, color);
+        r[0][0] = c;
+        r[0][1] = -s;
+        r[1][0] = s;
+        r[1][1] = c;
     }
 }
 
-// --- RASTERISEUR DIRECT DE QUADRILATÈRES PAR BALAYAGE (SCANLINE) ---
-void fillQuad(int pts[8], unsigned char color)
+static void mulMat(int a[3][3], int b[3][3], int out[3][3])
 {
-    int minY = pts[1];
-    int maxY = pts[1];
-    int idx, scanY, a, b_idx, x;
-
-    for (idx = 1; idx < 4; idx++)
-    {
-        if (pts[idx * 2 + 1] < minY)
-            minY = pts[idx * 2 + 1];
-        if (pts[idx * 2 + 1] > maxY)
-            maxY = pts[idx * 2 + 1];
-    }
-
-    if (minY < 0)
-        minY = 0;
-    if (maxY > 199)
-        maxY = 199;
-
-    for (scanY = minY; scanY <= maxY; scanY++)
-    {
-        int intersections[4];
-        int count = 0;
-
-        for (idx = 0; idx < 4; idx++)
+    int i, j, k;
+    long sum;
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
         {
-            int x1 = pts[idx * 2];
-            int y1 = pts[idx * 2 + 1];
-            int x2 = pts[((idx + 1) % 4) * 2];
-            int y2 = pts[((idx + 1) % 4) * 2 + 1];
-
-            if ((y1 <= scanY && y2 > scanY) || (y2 <= scanY && y1 > scanY))
-            {
-                if (y2 != y1)
-                {
-                    int intersectionX = x1 + (int)((long)(scanY - y1) * (x2 - x1) / (y2 - y1));
-                    if (count < 4)
-                    {
-                        intersections[count++] = intersectionX;
-                    }
-                }
-            }
+            sum = 0;
+            for (k = 0; k < 3; k++)
+                sum += (long)a[i][k] * b[k][j];
+            out[i][j] = (int)(sum >> 8);
         }
-
-        if (count >= 2)
-        {
-            for (a = 1; a < count; a++)
-            {
-                int key = intersections[a];
-                b_idx = a - 1;
-                while (b_idx >= 0 && intersections[b_idx] > key)
-                {
-                    intersections[b_idx + 1] = intersections[b_idx];
-                    b_idx--;
-                }
-                intersections[b_idx + 1] = key;
-            }
-
-            unsigned char *rowPtr = &backBuffer[(long)scanY * 320L];
-            for (a = 0; a < count - 1; a += 2)
-            {
-                int startx = intersections[a];
-                int endx = intersections[a + 1];
-
-                if (startx < 0)
-                    startx = 0;
-                if (endx >= 320)
-                    endx = 319;
-
-                for (x = startx; x <= endx; x++)
-                {
-                    rowPtr[x] = color;
-                }
-            }
-        }
-    }
 }
 
-static Face3D facesToDraw[130];
-static int faceCount = 0;
+/* Transforme la matrice en vecteurs prets a l'emploi + visibilite des 6 faces.
+   Bornes : chaque coordonnee reste < 31000 (tient dans un int 16 bits). */
+static void buildVecs(int m[3][3], ViewVecs &v)
+{
+    int k, f, my;
+    for (k = 0; k < 3; k++)
+    {
+        my = m[1][k] * 5 / 6; /* correction d'aspect 4/3 */
+        v.ux[k] = m[0][k] * SPACING;
+        v.uy[k] = my * SPACING;
+        v.uz[k] = m[2][k] * SPACING;
+        v.hx[k] = m[0][k] * HS;
+        v.hy[k] = my * HS;
+        v.hz[k] = m[2][k] * HS;
+    }
+    for (f = 0; f < 6; f++)
+        v.vis[f] = (faceSign[f] * m[2][faceAxis[f]] > 0);
+}
 
-// Coordonnée d'un point selon l'axe (0=X, 1=Y, 2=Z)
+void projectDir(int ax, int ay, int az, int angleX, int angleY, double &sx, double &sy)
+{
+    int m[3][3];
+    buildViewMatrix(angleX, angleY, m);
+    sx = (ax * m[0][0] + ay * m[0][1] + az * m[0][2]) / 256.0;
+    sy = -(ax * m[1][0] + ay * m[1][1] + az * m[1][2]) / 256.0 * 5.0 / 6.0;
+}
+
 static int coordOf(const Point3D &p, int axis)
 {
     if (axis == 0)
@@ -253,166 +232,9 @@ static int coordOf(const Point3D &p, int axis)
     return p.z;
 }
 
-// Rotation d'un point autour d'un axe (c = cos, s = sin de l'angle)
-static void rotAxis(double &x, double &y, double &z, int axis, double c, double s)
-{
-    double t;
-    if (axis == 0)
-    {
-        t = y * c - z * s;
-        z = y * s + z * c;
-        y = t;
-    }
-    else if (axis == 1)
-    {
-        t = x * c + z * s;
-        z = -x * s + z * c;
-        x = t;
-    }
-    else
-    {
-        t = x * c - y * s;
-        y = x * s + y * c;
-        x = t;
-    }
-}
-
-// Fonction principale de rendu du cube dans le back-buffer (avec correction d'aspect 4/3)
-void drawCube(const RubikCube &cube, double angleX, double angleY, const LayerAnim *anim)
-{
-    int centerX = 160;
-    int centerY = 100;
-    double spacing = 28.0;
-    double hs = spacing * 0.42;
-
-    double radX = angleX * 3.14159265 / 180.0;
-    double radY = angleY * 3.14159265 / 180.0;
-    double cosX = cos(radX), sinX = sin(radX);
-    double cosY = cos(radY), sinY = sin(radY);
-
-    int animating = (anim != 0 && anim->active);
-    int inLayer = 0;
-    double ac = 1.0, as = 0.0, th;
-    if (animating)
-    {
-        th = anim->sign * 1.5707963 * anim->step / anim->steps;
-        ac = cos(th);
-        as = sin(th);
-    }
-
-    faceCount = 0;
-
-    static const signed char faceTemplates[6][4][3] = {
-        {{-1, 1, -1}, {1, 1, -1}, {1, 1, 1}, {-1, 1, 1}},     // 0: Haut
-        {{-1, -1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, -1, -1}}, // 1: Bas
-        {{-1, -1, -1}, {-1, -1, 1}, {-1, 1, 1}, {-1, 1, -1}}, // 2: Gauche
-        {{1, -1, -1}, {1, 1, -1}, {1, 1, 1}, {1, -1, 1}},     // 3: Droite
-        {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}},     // 4: Avant
-        {{1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, -1}}  // 5: Arrière
-    };
-
-    static double faceNormals[6][3] = {
-        {0.0, 1.0, 0.0},
-        {0.0, -1.0, 0.0},
-        {-1.0, 0.0, 0.0},
-        {1.0, 0.0, 0.0},
-        {0.0, 0.0, 1.0},
-        {0.0, 0.0, -1.0}};
-
-    int i, f, v, a, b, c;
-    double cx, cy, cz, sumZ, avgZ;
-    double rotPts[4][3];
-
-    // 1. Rendu des 26 cubies mobiles
-    for (i = 0; i < 26; i++)
-    {
-
-        cx = cube.pieces[i].currentPos.x * spacing;
-        cy = cube.pieces[i].currentPos.y * spacing;
-        cz = cube.pieces[i].currentPos.z * spacing;
-
-        for (f = 0; f < 6; f++)
-        {
-            unsigned char col = cube.pieces[i].faceColors[f];
-            if (col == COLOR_NONE)
-                continue;
-
-            double nx = faceNormals[f][0] * hs;
-            double ny = faceNormals[f][1] * hs;
-            double nz = faceNormals[f][2] * hs;
-
-            if (inLayer)
-                rotAxis(nx, ny, nz, anim->axis, ac, as);
-
-            double nx1 = nx * cosY - nz * sinY;
-            double nz1 = nx * sinY + nz * cosY;
-            double ny1 = ny;
-
-            double rz_n = ny1 * sinX + nz1 * cosX;
-
-            if (rz_n < 0)
-                continue;
-
-            sumZ = 0;
-            for (v = 0; v < 4; v++)
-            {
-                double lx = cx + faceTemplates[f][v][0] * hs;
-                double ly = cy + faceTemplates[f][v][1] * hs;
-                double lz = cz + faceTemplates[f][v][2] * hs;
-
-                if (inLayer)
-                    rotAxis(lx, ly, lz, anim->axis, ac, as);
-
-                double x1 = lx * cosY - lz * sinY;
-                double z1 = lx * sinY + lz * cosY;
-                double y1 = ly;
-
-                rotPts[v][0] = x1;
-                rotPts[v][1] = y1 * cosX - z1 * sinX;
-                rotPts[v][2] = y1 * sinX + z1 * cosX;
-                sumZ += rotPts[v][2];
-            }
-
-            avgZ = sumZ / 4.0;
-
-            if (faceCount < 130)
-            {
-                facesToDraw[faceCount].owner = i;
-                facesToDraw[faceCount].faceIdx = f;
-                facesToDraw[faceCount].color = getMode13Color(col);
-                facesToDraw[faceCount].avgZ = avgZ;
-
-                for (v = 0; v < 4; v++)
-                {
-                    facesToDraw[faceCount].pts[v * 2] = centerX + (int)rotPts[v][0];
-                    // Correction d'aspect 4/3 appliquée sur l'axe Y (facteur 5.0 / 6.0)
-                    facesToDraw[faceCount].pts[v * 2 + 1] = centerY - (int)(rotPts[v][1] * 5.0 / 6.0);
-                }
-                faceCount++;
-            }
-        }
-    }
-
-    // 2. Tri par insertion des faces visibles
-    for (a = 0; a < faceCount - 1; a++)
-    {
-        for (b = a + 1; b < faceCount; b++)
-        {
-            if (facesToDraw[a].avgZ > facesToDraw[b].avgZ)
-            {
-                Face3D temp = facesToDraw[a];
-                facesToDraw[a] = facesToDraw[b];
-                facesToDraw[b] = temp;
-            }
-        }
-    }
-
-    // 3. Dessin de toutes les faces visibles triées
-    for (i = 0; i < faceCount; i++)
-    {
-        fillQuad(facesToDraw[i].pts, facesToDraw[i].color);
-    }
-}
+/* ------------------------------------------------------------------ */
+/* Selection a la souris                                              */
+/* ------------------------------------------------------------------ */
 
 static int pointInQuad(const int pts[8], int px, int py)
 {
@@ -430,42 +252,145 @@ static int pointInQuad(const int pts[8], int px, int py)
     return !(pos && neg);
 }
 
-// Les faces sont triées de l'arrière vers l'avant : on parcourt à l'envers
+/* Les faces sont dessinees de l'arriere vers l'avant : on parcourt a l'envers */
 int pickFace(int px, int py, int &owner, int &faceIdx)
 {
-    int i;
+    int i, idx;
     for (i = faceCount - 1; i >= 0; i--)
-        if (pointInQuad(facesToDraw[i].pts, px, py))
+    {
+        idx = order[i];
+        if (pointInQuad(facesToDraw[idx].pts, px, py))
         {
-            owner = facesToDraw[i].owner;
-            faceIdx = facesToDraw[i].faceIdx;
+            owner = facesToDraw[idx].owner;
+            faceIdx = facesToDraw[idx].faceIdx;
             return 1;
         }
+    }
     return 0;
 }
 
-// Projection écran (y vers le bas) d'un vecteur unité du modèle
-void projectDir(int ax, int ay, int az, double angleX, double angleY, double &sx, double &sy)
+/* ------------------------------------------------------------------ */
+/* Remplissage de quadrilatere convexe                                */
+/* ------------------------------------------------------------------ */
+
+static int edgeL[200], edgeR[200];
+
+static void scanEdge(int x1, int y1, int x2, int y2)
 {
-    double rx = angleX * 3.14159265 / 180.0, ry = angleY * 3.14159265 / 180.0;
-    double x1 = ax * cos(ry) - az * sin(ry);
-    double z1 = ax * sin(ry) + az * cos(ry);
-    sx = x1;
-    sy = -(ay * cos(rx) - z1 * sin(rx)) * 5.0 / 6.0;
+    long x, slope;
+    int y, xi, t;
+    if (y1 == y2)
+        return;
+    if (y1 > y2)
+    {
+        t = x1;
+        x1 = x2;
+        x2 = t;
+        t = y1;
+        y1 = y2;
+        y2 = t;
+    }
+    slope = ((long)(x2 - x1) << 8) / (y2 - y1);
+    x = (long)x1 << 8;
+    for (y = y1; y < y2; y++)
+    {
+        if (y >= 0 && y < 200)
+        {
+            xi = (int)(x >> 8);
+            if (xi < edgeL[y])
+                edgeL[y] = xi;
+            if (xi > edgeR[y])
+                edgeR[y] = xi;
+        }
+        x += slope;
+    }
 }
 
-void drawCursor(int x, int y)
+static void fillQuad(int pts[8], unsigned char color)
+{
+    int minY = pts[1], maxY = pts[1];
+    int i, y, l, r;
+
+    for (i = 1; i < 4; i++)
+    {
+        if (pts[i * 2 + 1] < minY)
+            minY = pts[i * 2 + 1];
+        if (pts[i * 2 + 1] > maxY)
+            maxY = pts[i * 2 + 1];
+    }
+    if (minY < 0)
+        minY = 0;
+    if (maxY > 199)
+        maxY = 199;
+
+    for (y = minY; y <= maxY; y++)
+    {
+        edgeL[y] = 32767;
+        edgeR[y] = -32768;
+    }
+
+    for (i = 0; i < 4; i++)
+        scanEdge(pts[i * 2], pts[i * 2 + 1],
+                 pts[((i + 1) % 4) * 2], pts[((i + 1) % 4) * 2 + 1]);
+
+    for (y = minY; y <= maxY; y++)
+    {
+        l = edgeL[y];
+        r = edgeR[y];
+        if (l > r)
+            continue;
+        if (l < 0)
+            l = 0;
+        if (r > 319)
+            r = 319;
+        if (l <= r)
+            _fmemset((unsigned char far *)backBuffer + rowOffset[y] + l, color, r - l + 1);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Primitives d'affichage                                             */
+/* ------------------------------------------------------------------ */
+
+void clearRect(int x0, int y0, int x1, int y1)
+{
+    int y;
+    for (y = y0; y <= y1; y++)
+        _fmemset((unsigned char far *)backBuffer + rowOffset[y] + x0, 0, x1 - x0 + 1);
+}
+
+void blitRect(int x0, int y0, int x1, int y1)
+{
+    int y, w;
+    if (x0 < 0)
+        x0 = 0;
+    if (y0 < 0)
+        y0 = 0;
+    if (x1 > 319)
+        x1 = 319;
+    if (y1 > 199)
+        y1 = 199;
+    if (x1 < x0 || y1 < y0)
+        return;
+    w = x1 - x0 + 1;
+    for (y = y0; y <= y1; y++)
+        _fmemcpy(MK_FP(0xA000, rowOffset[y] + x0),
+                 (unsigned char far *)backBuffer + rowOffset[y] + x0, w);
+}
+
+void drawCursorVRAM(int x, int y)
 {
     int i;
     for (i = -3; i <= 3; i++)
     {
         if (x + i >= 0 && x + i < 320 && y >= 0 && y < 200)
-            backBuffer[(long)y * 320L + x + i] = 15;
+            *((unsigned char far *)MK_FP(0xA000, rowOffset[y] + x + i)) = 15;
         if (y + i >= 0 && y + i < 200 && x >= 0 && x < 320)
-            backBuffer[(long)(y + i) * 320L + x] = 15;
+            *((unsigned char far *)MK_FP(0xA000, rowOffset[y + i] + x)) = 15;
     }
 }
 
+/* Texte dans le back-buffer avec la police 8x8 de la ROM (F000:FA6E) */
 void drawText(int x, int y, const char *str, unsigned char color)
 {
     unsigned char far *font = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
@@ -493,4 +418,107 @@ void drawText(int x, int y, const char *str, unsigned char color)
         x += 8;
         str++;
     }
+}
+
+/* ------------------------------------------------------------------ */
+/* Rendu du cube (entierement en entiers)                             */
+/* ------------------------------------------------------------------ */
+
+void drawCube(const RubikCube &cube, int angleX, int angleY, const LayerAnim *anim)
+{
+    int m[3][3], m2[3][3], r[3][3];
+    ViewVecs vv, vv2;
+    const ViewVecs *V;
+    int animating, deg;
+    int i, f, v, a, b, n, key, kz;
+    int px, py, pz, tx, ty, tz;
+    int cxs, cys, czs, sxv, syv;
+    unsigned char col;
+    Face3D *fc;
+
+    faceCount = 0;
+
+    /* Matrice de vue, et matrice combinee pour la couche animee */
+    buildViewMatrix(angleX, angleY, m);
+    buildVecs(m, vv);
+
+    animating = (anim != 0 && anim->active);
+    if (animating)
+    {
+        deg = (int)((long)anim->sign * 90L * anim->step / anim->steps);
+        buildLayerMatrix(anim->axis, deg, r);
+        mulMat(m, r, m2);
+        buildVecs(m2, vv2);
+    }
+
+    /* 1. Construction de la liste des faces visibles */
+    for (i = 0; i < 26; i++)
+    {
+        const Cubie &p = cube.pieces[i];
+
+        px = p.currentPos.x;
+        py = p.currentPos.y;
+        pz = p.currentPos.z;
+
+        if (animating && coordOf(p.currentPos, anim->axis) == anim->layer)
+            V = &vv2;
+        else
+            V = &vv;
+
+        cxs = px * V->ux[0] + py * V->ux[1] + pz * V->ux[2];
+        cys = px * V->uy[0] + py * V->uy[1] + pz * V->uy[2];
+        czs = px * V->uz[0] + py * V->uz[1] + pz * V->uz[2];
+
+        for (f = 0; f < 6; f++)
+        {
+            col = p.faceColors[f];
+            if (col == COLOR_NONE || !V->vis[f])
+                continue;
+            if (faceCount >= MAX_FACES)
+                break;
+
+            n = faceAxis[f];
+            fc = &facesToDraw[faceCount];
+
+            for (v = 0; v < 4; v++)
+            {
+                tx = faceTemplates[f][v][0];
+                ty = faceTemplates[f][v][1];
+                tz = faceTemplates[f][v][2];
+
+                sxv = cxs + tx * V->hx[0] + ty * V->hx[1] + tz * V->hx[2];
+                syv = cys + tx * V->hy[0] + ty * V->hy[1] + tz * V->hy[2];
+
+                fc->pts[v * 2] = CENTER_X + ((sxv + 128) >> 8);
+                fc->pts[v * 2 + 1] = CENTER_Y - ((syv + 128) >> 8);
+            }
+
+            fc->color = getMode13Color(col);
+            fc->z = czs + faceSign[f] * V->hz[n];
+            fc->owner = i;
+            fc->faceIdx = f;
+            faceCount++;
+        }
+    }
+
+    /* 2. Tri par insertion d'un tableau d'indices (de l'arriere vers l'avant) */
+    for (a = 0; a < faceCount; a++)
+        order[a] = a;
+
+    for (a = 1; a < faceCount; a++)
+    {
+        key = order[a];
+        kz = facesToDraw[key].z;
+        b = a - 1;
+        while (b >= 0 && facesToDraw[order[b]].z > kz)
+        {
+            order[b + 1] = order[b];
+            b--;
+        }
+        order[b + 1] = key;
+    }
+
+    /* 3. Dessin */
+    for (a = 0; a < faceCount; a++)
+        fillQuad(facesToDraw[order[a]].pts, facesToDraw[order[a]].color);
 }
