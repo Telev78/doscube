@@ -12,10 +12,19 @@
 /* Zone du texte (compteur de coups) */
 #define HUD_X0 0
 #define HUD_Y0 0
-#define HUD_X1 159
+#define HUD_X1 239
 #define HUD_Y1 11
 
+/* Bouton "Melanger" en bas a droite */
+#define BTN_X0 244
+#define BTN_Y0 178
+#define BTN_X1 315
+#define BTN_Y1 195
+#define IN_BUTTON(x, y) ((x) >= BTN_X0 && (x) <= BTN_X1 && (y) >= BTN_Y0 && (y) <= BTN_Y1)
+
 void initRenderer();
+void fillRect(int x0, int y0, int x1, int y1, unsigned char color);
+void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed);
 void clearRect(int x0, int y0, int x1, int y1);
 void blitRect(int x0, int y0, int x1, int y1);
 void drawCursorVRAM(int x, int y);

@@ -1,4 +1,5 @@
 #include "cube.h"
+#include <stdlib.h>
 
 // Initialise une pièce à la position (x, y, z) : une face colorée par coordonnée à ±1
 static void setupPiece(Cubie &p, int x, int y, int z)
@@ -296,4 +297,47 @@ void rotateLayer(RubikCube &cube, int axis, int layer, int sign)
         rotateY(cube, layer, cw);
     else
         rotateZ(cube, layer, cw);
+}
+
+// 1 si chacune des 6 faces n'a qu'une seule couleur
+// (fonctionne même si les tranches centrales ont déplacé les centres)
+int isSolved(const RubikCube &cube)
+{
+    static const int fAxis[6] = {1, 1, 0, 0, 2, 2};
+    static const int fSign[6] = {1, -1, -1, 1, 1, -1};
+    int f, i, coord, ref, c;
+    const Point3D *p;
+
+    for (f = 0; f < 6; f++)
+    {
+        ref = -1;
+        for (i = 0; i < 26; i++)
+        {
+            p = &cube.pieces[i].currentPos;
+            coord = (fAxis[f] == 0) ? p->x : (fAxis[f] == 1) ? p->y
+                                                             : p->z;
+            if (coord != fSign[f])
+                continue;
+            c = cube.pieces[i].faceColors[f];
+            if (c == COLOR_NONE)
+                return 0;
+            if (ref < 0)
+                ref = c;
+            else if (c != ref)
+                return 0;
+        }
+    }
+    return 1;
+}
+
+// Tire une face au hasard (couche extérieure) et un sens, en évitant de
+// retomber sur la même face que le coup précédent
+void randomMove(int lastAxis, int lastLayer, int &axis, int &layer, int &sign)
+{
+    do
+    {
+        axis = rand() % 3;
+        layer = (rand() % 2) ? 1 : -1;
+    } while (axis == lastAxis && layer == lastLayer);
+    sign = (rand() % 2) ? 1 : -1;
 }

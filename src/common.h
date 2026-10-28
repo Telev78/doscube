@@ -8,5 +8,8 @@ const char *const STR_ERR_MODE13 = "Erreur : impossible d'activer le mode graphi
 const char *const STR_ERR_NO_MOUSE = "Erreur : souris non detectee !";
 const char *const STR_ERR_MOUSE_BUTTONS = "Erreur : souris a 2 boutons requise.";
 const char *const STR_MOVES = "Coups : %u";
+const char *const STR_SOLVED = "Resolu en %u coups !";
+const char *const STR_SHUFFLING = "Melange...";
+const char *const STR_BTN_SHUFFLE = "Melanger";
 
 #endif

@@ -478,11 +478,37 @@ static void fillQuad(int pts[8], unsigned char color)
 /* Primitives d'affichage                                             */
 /* ------------------------------------------------------------------ */
 
-void clearRect(int x0, int y0, int x1, int y1)
+void fillRect(int x0, int y0, int x1, int y1, unsigned char color)
 {
     int y;
     for (y = y0; y <= y1; y++)
-        _fmemset((unsigned char far *)backBuffer + rowOffset[y] + x0, 0, x1 - x0 + 1);
+        _fmemset((unsigned char far *)backBuffer + rowOffset[y] + x0, color, x1 - x0 + 1);
+}
+
+void clearRect(int x0, int y0, int x1, int y1)
+{
+    fillRect(x0, y0, x1, y1, 0);
+}
+
+/* Bouton en relief dans le back-buffer (texte centre, noir sur gris) */
+void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed)
+{
+    int len = 0, tx, ty;
+    const char *p = text;
+    unsigned char light = pressed ? 8 : 15;
+    unsigned char dark = pressed ? 15 : 8;
+
+    fillRect(x0, y0, x1, y1, 7);     /* fond gris clair   */
+    fillRect(x0, y0, x1, y0, light); /* bord haut         */
+    fillRect(x0, y0, x0, y1, light); /* bord gauche       */
+    fillRect(x0, y1, x1, y1, dark);  /* bord bas          */
+    fillRect(x1, y0, x1, y1, dark);  /* bord droit        */
+
+    while (*p++)
+        len++;
+    tx = x0 + ((x1 - x0 + 1) - len * 8) / 2 + (pressed ? 1 : 0);
+    ty = y0 + ((y1 - y0 + 1) - 8) / 2 + (pressed ? 1 : 0);
+    drawText(tx, ty, text, 0);
 }
 
 void blitRect(int x0, int y0, int x1, int y1)

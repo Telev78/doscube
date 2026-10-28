@@ -59,5 +59,7 @@ struct LayerAnim
     int steps;
 };
 void rotateLayer(RubikCube &cube, int axis, int layer, int sign);
+int isSolved(const RubikCube &cube);
+void randomMove(int lastAxis, int lastLayer, int &axis, int &layer, int &sign);
 
 #endif

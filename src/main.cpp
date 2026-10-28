@@ -6,11 +6,16 @@
 #include <stdlib.h>
 #include <graphics.h>
 #include <math.h>
+#include <bios.h>
+#include <string.h>
 #include "cube.h"
 #include "mouse.h"
 #include "renderer.h"
 #include "common.h"
 #include "control.h"
+
+#define ANIM_STEPS 12
+#define SHUFFLE_STEPS 4 // animation rapide pendant le mélange
 
 // Tableau de 64 000 octets alloué en mémoire lointaine (far) pour éviter le dépassement de segment
 unsigned char far backBuffer[320UL * 200UL];
@@ -138,31 +143,35 @@ int main()
         return 1;
     }
 
-    int mouseX, mouseY, leftBtn;
-    char moveText[32];
-
-    LayerAnim anim = {0, 0, 0, 0, 0, 12};
-    int viewDrag = 0, faceDrag = 0, moveDone = 1;
-    int owner, fIdx, startX = 0, startY = 0, prevX = 0, prevY = 0;
-    int px, py, left, right, dx, dy, axis, layer, sign;
-    int lastPx = -1, lastPy = -1;
-    int viewChanged = 1; // 1 = forcer le premier affichage
-    int redraw;
+    LayerAnim anim = {0, 0, 0, 0, 0, ANIM_STEPS};
+    int mouseX, mouseY, left, right, px, py, dx, dy;
+    int viewDrag = 0, faceDrag = 0, moveDone = 1, btnDown = 0;
+    int owner = 0, fIdx = 0, startX = 0, startY = 0, prevX = 0, prevY = 0;
+    int axis, layer, sign;
+    int lastPx = -1, lastPy = -1, viewChanged = 1, redraw;
+    int shuffling = 0, shuffleLeft = 0, lastAxis = -1, lastLayer = 0;
+    int wantShuffle = 0, gameState = 0, busy, key; // 0 libre, 1 en jeu, 2 résolu
+    unsigned finalMoves = 0;
+    unsigned char textColor;
+    char moveText[40];
 
     while (!quitRequested)
     {
         getMouseStatus(mouseX, mouseY, left, right);
         px = mouseX / 2;
         py = mouseY;
+        busy = (anim.active || shuffling);
 
+        // --- Clavier ---
         if (kbhit())
         {
-            char key = getch();
+            key = getch();
             if (key == 27)
-            {
                 quitRequested = 1;
-            }
+            else if (key == 'm' || key == 'M')
+                wantShuffle = 1;
         }
+
         // --- Clic droit : rotation de la vue ---
         if (right)
         {
@@ -178,7 +187,7 @@ int main()
         else
             viewDrag = 0;
 
-        // --- Clic gauche : rotation d'une face ---
+        // --- Clic gauche : bouton ou rotation d'une face ---
         if (left && !right)
         {
             if (!faceDrag)
@@ -186,7 +195,14 @@ int main()
                 faceDrag = 1;
                 startX = px;
                 startY = py;
-                moveDone = anim.active || !pickFace(px, py, owner, fIdx);
+                if (IN_BUTTON(px, py))
+                {
+                    btnDown = 1;
+                    moveDone = 1;
+                    viewChanged = 1;
+                }
+                else
+                    moveDone = busy || !pickFace(px, py, owner, fIdx);
             }
             else if (!moveDone)
             {
@@ -194,10 +210,11 @@ int main()
                 dy = py - startY;
                 if (abs(dx) + abs(dy) >= 8)
                 {
-                    if (computeMove(myCube, owner, fIdx, dx, dy, axis, layer, sign))
+                    if (!busy && computeMove(myCube, owner, fIdx, dx, dy, axis, layer, sign))
                     {
                         anim.active = 1;
                         anim.step = 0;
+                        anim.steps = ANIM_STEPS;
                         anim.axis = axis;
                         anim.layer = layer;
                         anim.sign = sign;
@@ -206,38 +223,107 @@ int main()
                 }
             }
         }
-        else
+        else if (!left)
+        {
+            if (btnDown) // relâché : clic valide s'il est encore sur le bouton
+            {
+                if (IN_BUTTON(px, py))
+                    wantShuffle = 1;
+                btnDown = 0;
+                viewChanged = 1;
+            }
             faceDrag = 0;
+        }
+
+        // --- Lancement d'un mélange ---
+        if (wantShuffle && !busy)
+        {
+            srand((unsigned)biostime(0, 0));
+            shuffleLeft = 20 + rand() % 21; // 20 à 40 rotations
+            shuffling = 1;
+            gameState = 0;
+            lastAxis = -1;
+            lastLayer = 0;
+            viewChanged = 1;
+        }
+        wantShuffle = 0;
+
+        // --- Prochain coup du mélange ---
+        if (shuffling && shuffleLeft > 0 && !anim.active)
+        {
+            randomMove(lastAxis, lastLayer, axis, layer, sign);
+            anim.active = 1;
+            anim.step = 0;
+            anim.steps = SHUFFLE_STEPS;
+            anim.axis = axis;
+            anim.layer = layer;
+            anim.sign = sign;
+            lastAxis = axis;
+            lastLayer = layer;
+            shuffleLeft--;
+        }
 
         // --- Avancement de l'animation ---
         if (anim.active && ++anim.step >= anim.steps)
         {
             rotateLayer(myCube, anim.axis, anim.layer, anim.sign);
             anim.active = 0;
-            viewChanged = 1; // afficher l'état final
+            viewChanged = 1;
+
+            if (shuffling)
+            {
+                if (shuffleLeft == 0)
+                {
+                    if (isSolved(myCube))
+                        shuffleLeft = 1; // très improbable : on ajoute un coup
+                    else
+                    {
+                        shuffling = 0;
+                        myCube.moveCount = 0; // le compteur ne compte que le joueur
+                        myCube.isMixed = 1;
+                        gameState = 1;
+                    }
+                }
+            }
+            else if (gameState == 1 && isSolved(myCube))
+            {
+                gameState = 2;
+                finalMoves = myCube.moveCount;
+                myCube.isMixed = 0;
+            }
         }
 
+        // --- Affichage ---
         redraw = (anim.active || viewChanged);
 
         if (redraw)
         {
-            // 1. Dessin dans le back-buffer (zone cube + zone texte seulement)
             clearRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
             drawCube(myCube, &anim);
 
-            clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
-            sprintf(moveText, STR_MOVES, myCube.moveCount);
-            drawText(4, 2, moveText, 15);
+            textColor = 15;
+            if (shuffling)
+                strcpy(moveText, STR_SHUFFLING);
+            else if (gameState == 2)
+            {
+                sprintf(moveText, STR_SOLVED, finalMoves);
+                textColor = 14;
+            }
+            else
+                sprintf(moveText, STR_MOVES, myCube.moveCount);
 
-            // 2. Copie vers l'écran, synchronisée sur le retour vertical
+            clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
+            drawText(4, 2, moveText, textColor);
+            drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, STR_BTN_SHUFFLE, btnDown);
+
             waitVSync();
             blitRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
             blitRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
+            blitRect(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1);
             viewChanged = 0;
         }
 
-        // 3. Curseur : on restaure l'ancien emplacement depuis le back-buffer,
-        //    puis on dessine le nouveau directement en VRAM
+        // --- Curseur : restauration de l'ancienne zone puis dessin en VRAM ---
         if (redraw || px != lastPx || py != lastPy)
         {
             blitRect(lastPx - 3, lastPy - 3, lastPx + 3, lastPy + 3);
