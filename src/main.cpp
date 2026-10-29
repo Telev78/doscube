@@ -15,14 +15,13 @@
 #include "control.h"
 #include "timer.h"
 #include "history.h"
+#include "options.h"
+#include "about.h"
 
-#define HISTORY_STEPS 6
 #define MOVE_MANUAL 0
 #define MOVE_UNDO 1
 #define MOVE_REDO 2
 #define MOVE_SHUFFLE 3
-#define ANIM_STEPS 12
-#define SHUFFLE_STEPS 4 // animation rapide pendant le mélange
 
 // Tableau de 64 000 octets alloué en mémoire lointaine (far) pour éviter le dépassement de segment
 unsigned char far backBuffer[320UL * 200UL];
@@ -118,6 +117,35 @@ int main(int argc, char *argv[])
 {
     initLanguage(argc, argv);
 
+    int status = parseOptions(argc, argv);
+    if (status == OPT_HELP)
+    {
+        printHelp();
+        return 0;
+    }
+    if (status == OPT_ERROR)
+    {
+        printf(T(S_ERR_BAD_OPTION), badOption());
+        printf("\n%s\n", T(S_HINT_HELP));
+        return 1;
+    }
+
+    resolveCpuMode();
+
+    int stepsManual, stepsHistory, stepsShuffle;
+    if (options.cpuMode == CPU_SLOW)
+    {
+        stepsManual = 6;
+        stepsHistory = 3;
+        stepsShuffle = 2;
+    }
+    else
+    {
+        stepsManual = 12;
+        stepsHistory = 6;
+        stepsShuffle = 4;
+    }
+
     RubikCube myCube;
     initCube(myCube);
 
@@ -155,7 +183,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    LayerAnim anim = {0, 0, 0, 0, 0, ANIM_STEPS};
+    LayerAnim anim = {0, 0, 0, 0, 0, 1};
     int mouseX, mouseY, left, right, px, py, dx, dy;
     int viewDrag = 0, faceDrag = 0, moveDone = 1, btnDown = 0;
     int owner = 0, fIdx = 0, startX = 0, startY = 0, prevX = 0, prevY = 0;
@@ -173,6 +201,8 @@ int main(int argc, char *argv[])
     int wantUndo = 0, wantRedo = 0, canUndo, canRedo;
     int hAxis, hLayer, hSign;
     unsigned savedCount;
+    int wantHelp = 0, resumeTimer;
+    int wantQuit = 0;
 
     while (!quitRequested)
     {
@@ -191,20 +221,24 @@ int main(int argc, char *argv[])
             if (key == 0 || key == 224) // touche étendue : le code est dans l'octet suivant
             {
                 key = getch();
-                if (key == 75)
-                    wantUndo = 1; // flèche gauche
-                else if (key == 77)
-                    wantRedo = 1; // flèche droite
+                if (key == 75) // flèche gauche
+                    wantUndo = 1;
+                else if (key == 77) // flèche droite
+                    wantRedo = 1;
+                else if (key == 59) // F1
+                    wantHelp = 1;
             }
-            else if (key == 27)
-                quitRequested = 1;
-            else if (key == 'm' || key == 'M')
+            else if (key == 27) // Echap pour quitter
+                wantQuit = 1;
+            else if (key == '?') // ? pour affichier l'aide
+                wantHelp = 1;
+            else if (key == 'm' || key == 'M') // m pour mélanger le cube
                 wantShuffle = 1;
-            else if (key == 'u' || key == 'U')
+            else if (key == 'u' || key == 'U') // undo
                 wantUndo = 1;
-            else if (key == 'r' || key == 'R')
+            else if (key == 'r' || key == 'R') // redo
                 wantRedo = 1;
-            else if (key == 'l' || key == 'L')
+            else if (key == 'l' || key == 'L') // boucle entre les langues d'interfaces
             {
                 nextLanguage();
                 viewChanged = 1;
@@ -241,6 +275,10 @@ int main(int argc, char *argv[])
                     btnDown = 2;
                 else if (IN_REDO(px, py) && canRedo)
                     btnDown = 3;
+                else if (IN_HELP(px, py))
+                    btnDown = 4;
+                else if (IN_QUIT(px, py))
+                    btnDown = 5;
 
                 if (btnDown)
                 {
@@ -264,7 +302,7 @@ int main(int argc, char *argv[])
                             timerStart();
                         anim.active = 1;
                         anim.step = 0;
-                        anim.steps = ANIM_STEPS;
+                        anim.steps = stepsManual;
                         anim.axis = axis;
                         anim.layer = layer;
                         anim.sign = sign;
@@ -284,6 +322,10 @@ int main(int argc, char *argv[])
                     wantUndo = 1;
                 else if (btnDown == 3 && IN_REDO(px, py))
                     wantRedo = 1;
+                else if (btnDown == 4 && IN_HELP(px, py))
+                    wantHelp = 1;
+                else if (btnDown == 5 && IN_QUIT(px, py))
+                    wantQuit = 1;
                 btnDown = 0;
                 viewChanged = 1;
             }
@@ -310,7 +352,7 @@ int main(int argc, char *argv[])
             randomMove(lastAxis, lastLayer, axis, layer, sign);
             anim.active = 1;
             anim.step = 0;
-            anim.steps = SHUFFLE_STEPS;
+            anim.steps = stepsShuffle;
             anim.axis = axis;
             anim.layer = layer;
             anim.sign = sign;
@@ -326,7 +368,7 @@ int main(int argc, char *argv[])
         {
             anim.active = 1;
             anim.step = 0;
-            anim.steps = HISTORY_STEPS;
+            anim.steps = stepsHistory;
             anim.axis = hAxis;
             anim.layer = hLayer;
             anim.sign = hSign;
@@ -337,7 +379,7 @@ int main(int argc, char *argv[])
         {
             anim.active = 1;
             anim.step = 0;
-            anim.steps = HISTORY_STEPS;
+            anim.steps = stepsHistory;
             anim.axis = hAxis;
             anim.layer = hLayer;
             anim.sign = hSign;
@@ -345,6 +387,48 @@ int main(int argc, char *argv[])
         }
         wantUndo = 0;
         wantRedo = 0;
+
+        // --- About & Help ---
+        if (wantHelp && !anim.active && !shuffling)
+        {
+            resumeTimer = timerRunning();
+            if (resumeTimer)
+                timerStop(); // pause du chrono
+            showAbout();
+            if (resumeTimer)
+                timerResume();
+            viewChanged = 1;
+            lastPx = -1;
+            lastPy = -1; // force le redessin du curseur
+            faceDrag = 0;
+            btnDown = 0;
+            moveDone = 1;
+            viewDrag = 0;
+        }
+        wantHelp = 0;
+
+        // --- confirmation avant de quitter ---
+        if (wantQuit)
+        {
+            if (gameState == 1 && timerRunning())
+            {
+                timerStop(); // pause du chrono
+                if (confirmQuit())
+                    quitRequested = 1;
+                else
+                    timerResume();
+                viewChanged = 1; // redessine le centre de l'écran
+                lastPx = -1;
+                lastPy = -1; // force le redessin du curseur
+                faceDrag = 0;
+                btnDown = 0;
+                moveDone = 1;
+                viewDrag = 0;
+            }
+            else
+                quitRequested = 1;
+        }
+        wantQuit = 0;
 
         // --- Avancement de l'animation ---
         if (anim.active && ++anim.step >= anim.steps)
@@ -420,12 +504,15 @@ int main(int argc, char *argv[])
             drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, T(S_BTN_SHUFFLE), btnDown == 1);
             drawButtonEx(UNDO_X0, UNDO_Y0, UNDO_X1, UNDO_Y1, "\033", btnDown == 2, canUndo);
             drawButtonEx(REDO_X0, REDO_Y0, REDO_X1, REDO_Y1, "\032", btnDown == 3, canRedo);
+            drawButtonEx(HELP_X0, HELP_Y0, HELP_X1, HELP_Y1, "?", btnDown == 4, 1);
+            drawButtonEx(QUIT_X0, QUIT_Y0, QUIT_X1, QUIT_Y1, "X", btnDown == 5, 1);
 
             waitVSync();
             blitRectCursor(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1, px, py);
             blitRectCursor(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1, px, py);
             blitRectCursor(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, px, py);
             blitRectCursor(NAV_X0, NAV_Y0, NAV_X1, NAV_Y1, px, py);
+            blitRectCursor(TOP_X0, TOP_Y0, TOP_X1, TOP_Y1, px, py);
             strcpy(lastTimeText, timeText);
             viewChanged = 0;
         }

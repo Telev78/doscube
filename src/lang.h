@@ -21,6 +21,28 @@ enum StrId
     S_SOLVED, /* format : un %u (nombre de coups)          */
     S_SHUFFLING,
     S_BTN_SHUFFLE,
+    S_ERR_BAD_OPTION, /* format : un %s (option fautive)           */
+    S_HINT_HELP,
+    S_HELP_TITLE,
+    S_HELP_USAGE, /* format : un %s (nom du programme)         */
+    S_HELP_OPT_L,
+    S_HELP_OPT_C,
+    S_HELP_OPT_HELP,
+    S_HELP_KEYS,
+    S_HELP_MOUSE,
+    S_ABOUT_VERSION, /* format : un %s (numero de version)        */
+    S_ABOUT_MOUSE,
+    S_ABOUT_MOUSE1,
+    S_ABOUT_MOUSE2,
+    S_ABOUT_KEYS,
+    S_ABOUT_KEYS1,
+    S_ABOUT_KEYS2,
+    S_ABOUT_KEYS3,
+    S_ABOUT_CLOSE,
+    S_QUIT_TITLE,
+    S_QUIT_MSG,
+    S_QUIT_YES,
+    S_QUIT_NO,
     S_COUNT
 };
 

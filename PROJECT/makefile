@@ -29,12 +29,15 @@ BUILD_OBJS = $(BUILD_DIR)\main.obj \
 			 $(BUILD_DIR)\control.obj \
 			 $(BUILD_DIR)\lang.obj \
 			 $(BUILD_DIR)\timer.obj \
-			 $(BUILD_DIR)\history.obj
+			 $(BUILD_DIR)\history.obj \
+			 $(BUILD_DIR)\options.obj \
+			 $(BUILD_DIR)\cpu.obj \
+			 $(BUILD_DIR)\about.obj
 
 # 1. RÈGLE DE LIAISON FINALE
 $(TARGET): $(BUILD_OBJS)
 	bcc $(CFLAGS) $(LIBS) -e$(TARGET) @&&|
-$(BUILD_OBJS) graphics.lib
+$(BUILD_OBJS)
 |
 
 

@@ -44,6 +44,22 @@
 #define IN_UNDO(x, y) ((x) >= UNDO_X0 && (x) <= UNDO_X1 && (y) >= UNDO_Y0 && (y) <= UNDO_Y1)
 #define IN_REDO(x, y) ((x) >= REDO_X0 && (x) <= REDO_X1 && (y) >= REDO_Y0 && (y) <= REDO_Y1)
 
+/* Boutons "?" (a propos / aide) et "X" (quitter) dans le coin superieur droit */
+#define HELP_X0 276
+#define HELP_Y0 4
+#define HELP_X1 293
+#define HELP_Y1 21
+#define QUIT_X0 298
+#define QUIT_Y0 4
+#define QUIT_X1 315
+#define QUIT_Y1 21
+#define TOP_X0 HELP_X0
+#define TOP_Y0 HELP_Y0
+#define TOP_X1 QUIT_X1
+#define TOP_Y1 QUIT_Y1
+#define IN_HELP(x, y) ((x) >= HELP_X0 && (x) <= HELP_X1 && (y) >= HELP_Y0 && (y) <= HELP_Y1)
+#define IN_QUIT(x, y) ((x) >= QUIT_X0 && (x) <= QUIT_X1 && (y) >= QUIT_Y0 && (y) <= QUIT_Y1)
+
 void initRenderer();
 void fillRect(int x0, int y0, int x1, int y1, unsigned char color);
 void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed);
@@ -58,6 +74,7 @@ void cursorToBuffer(int x, int y);
 void cursorFromBuffer(int x, int y);
 void blitRectCursor(int x0, int y0, int x1, int y1, int cx, int cy);
 void drawText(int x, int y, const char *str, unsigned char color);
+void drawTextScaled(int x, int y, const char *str, unsigned char color, int scale);
 
 /* Retrouve la face coloree situee sous le pixel (px, py) */
 int pickFace(int px, int py, int &owner, int &faceIdx);

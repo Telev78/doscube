@@ -10,7 +10,8 @@ void timerRestore(); /* remet le PIT dans son mode d'origine (via atexit)     */
 
 void timerReset();  /* remet a zero, chrono arrete                           */
 void timerStart();  /* demarre a partir de zero                              */
-void timerStop();   /* fige le temps ecoule                                  */
+void timerStop();   /* fige le temps ecoule (pause)                          */
+void timerResume(); /* reprend le comptage apres un timerStop()              */
 int timerRunning(); /* 1 si le chrono tourne                                 */
 
 unsigned long timerElapsedMs();               /* temps ecoule en millisecondes     */

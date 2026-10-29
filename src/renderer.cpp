@@ -690,6 +690,45 @@ void drawText(int x, int y, const char *str, unsigned char color)
     }
 }
 
+/* Texte agrandi (chaque pixel de la police devient un carre scale x scale),
+   dessine directement dans le back-buffer. Pour les titres. */
+void drawTextScaled(int x, int y, const char *str, unsigned char color, int scale)
+{
+    unsigned char far *lowFont = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
+    unsigned char far *highFont = upperFont();
+    unsigned char far *glyph;
+    int row, bit, x0, y0;
+    unsigned char bits, ch;
+
+    while (*str)
+    {
+        ch = (unsigned char)*str;
+        if (ch < 128)
+            glyph = lowFont + (unsigned)ch * 8;
+        else if (highFont)
+            glyph = highFont + (unsigned)(ch - 128) * 8;
+        else
+            glyph = lowFont + (unsigned)'?' * 8;
+
+        for (row = 0; row < 8; row++)
+        {
+            bits = glyph[row];
+            for (bit = 0; bit < 8; bit++)
+            {
+                if (bits & (0x80 >> bit))
+                {
+                    x0 = x + bit * scale;
+                    y0 = y + row * scale;
+                    if (x0 >= 0 && y0 >= 0 && x0 + scale <= 320 && y0 + scale <= 200)
+                        fillRect(x0, y0, x0 + scale - 1, y0 + scale - 1, color);
+                }
+            }
+        }
+        x += 8 * scale;
+        str++;
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Rendu du cube (entierement en entiers)                             */
 /* ------------------------------------------------------------------ */

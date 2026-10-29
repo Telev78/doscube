@@ -13,7 +13,7 @@ static int pitProgrammed = 0;
 static int running = 0;
 static unsigned long startTicks = 0;
 static unsigned startFrac = 0;
-static unsigned long frozenMs = 0;
+static unsigned long baseMs = 0; /* temps deja accumule (chrono arrete ou en pause) */
 
 /* ------------------------------------------------------------------ */
 /* Lecture de l'horloge : ticks BIOS + fraction de tick (0..65535)    */
@@ -109,13 +109,13 @@ void timerRestore()
 void timerReset()
 {
     running = 0;
-    frozenMs = 0;
+    baseMs = 0;
 }
 
 void timerStart()
 {
+    baseMs = 0;
     readClock(startTicks, startFrac);
-    frozenMs = 0;
     running = 1;
 }
 
@@ -124,17 +124,27 @@ unsigned long timerElapsedMs()
     unsigned long t;
     unsigned f;
     if (!running)
-        return frozenMs;
+        return baseMs;
     readClock(t, f);
-    return diffMs(startTicks, startFrac, t, f);
+    return baseMs + diffMs(startTicks, startFrac, t, f);
 }
 
 void timerStop()
 {
     if (running)
     {
-        frozenMs = timerElapsedMs();
+        baseMs = timerElapsedMs();
         running = 0;
+    }
+}
+
+/* Reprend le comptage la ou timerStop() l'a laisse (pause) */
+void timerResume()
+{
+    if (!running)
+    {
+        readClock(startTicks, startFrac);
+        running = 1;
     }
 }
 
