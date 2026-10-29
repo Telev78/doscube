@@ -13,6 +13,7 @@
 #include "renderer.h"
 #include "lang.h"
 #include "control.h"
+#include "timer.h"
 
 #define ANIM_STEPS 12
 #define SHUFFLE_STEPS 4 // animation rapide pendant le mélange
@@ -130,6 +131,9 @@ int main(int argc, char *argv[])
     ctrlbrk(ctrlBreakHandler);
     initRenderer();
 
+    timerInit();
+    atexit(timerRestore);
+
     // 2. Initialisation de la souris
     int numButtons = initMouse();
     if (numButtons == 0)
@@ -156,6 +160,9 @@ int main(int argc, char *argv[])
     unsigned finalMoves = 0;
     unsigned char textColor;
     char moveText[40];
+    char timeText[16], lastTimeText[16];
+    int chronoUpdated;
+    lastTimeText[0] = 0;
 
     while (!quitRequested)
     {
@@ -219,6 +226,8 @@ int main(int argc, char *argv[])
                 {
                     if (!busy && computeMove(myCube, owner, fIdx, dx, dy, axis, layer, sign))
                     {
+                        if (gameState == 1 && !timerRunning())
+                            timerStart();
                         anim.active = 1;
                         anim.step = 0;
                         anim.steps = ANIM_STEPS;
@@ -289,6 +298,7 @@ int main(int argc, char *argv[])
                         myCube.moveCount = 0; // le compteur ne compte que le joueur
                         myCube.isMixed = 1;
                         gameState = 1;
+                        timerReset();
                     }
                 }
             }
@@ -296,12 +306,14 @@ int main(int argc, char *argv[])
             {
                 gameState = 2;
                 finalMoves = myCube.moveCount;
+                timerStop();
                 myCube.isMixed = 0;
             }
         }
 
         // --- Affichage ---
         redraw = (anim.active || viewChanged);
+        chronoUpdated = 0;
 
         if (redraw)
         {
@@ -321,17 +333,31 @@ int main(int argc, char *argv[])
 
             clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
             drawText(4, 2, moveText, textColor);
+            formatTime(timeText, timerElapsedMs());
+            drawText(4, 14, timeText, textColor);
             drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, T(S_BTN_SHUFFLE), btnDown);
 
             waitVSync();
             blitRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
             blitRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
             blitRect(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1);
+            strcpy(lastTimeText, timeText);
             viewChanged = 0;
         }
-
+        else if (timerRunning())
+        {
+            formatTime(timeText, timerElapsedMs());
+            if (strcmp(timeText, lastTimeText) != 0)
+            {
+                clearRect(CHRONO_X0, CHRONO_Y0, CHRONO_X1, CHRONO_Y1);
+                drawText(4, 14, timeText, 15);
+                blitRect(CHRONO_X0, CHRONO_Y0, CHRONO_X1, CHRONO_Y1);
+                strcpy(lastTimeText, timeText);
+                chronoUpdated = 1;
+            }
+        }
         // --- Curseur : restauration de l'ancienne zone puis dessin en VRAM ---
-        if (redraw || px != lastPx || py != lastPy)
+        if (redraw || chronoUpdated || px != lastPx || py != lastPy)
         {
             blitRect(lastPx, lastPy, lastPx + CURSOR_W - 1, lastPy + CURSOR_H - 1);
             drawCursorVRAM(px, py);

@@ -27,7 +27,8 @@ BUILD_OBJS = $(BUILD_DIR)\main.obj \
  			 $(BUILD_DIR)\renderer.obj \
 			 $(BUILD_DIR)\mouse.obj \
 			 $(BUILD_DIR)\control.obj \
-			 $(BUILD_DIR)\lang.obj
+			 $(BUILD_DIR)\lang.obj \
+			 $(BUILD_DIR)\timer.obj
 
 # 1. RÈGLE DE LIAISON FINALE
 $(TARGET): $(BUILD_OBJS)

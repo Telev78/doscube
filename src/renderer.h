@@ -13,7 +13,13 @@
 #define HUD_X0 0
 #define HUD_Y0 0
 #define HUD_X1 239
-#define HUD_Y1 11
+#define HUD_Y1 23
+
+/* Ligne du chrono (sous le compteur de coups, a l'interieur de la zone HUD) */
+#define CHRONO_X0 0
+#define CHRONO_Y0 12
+#define CHRONO_X1 95
+#define CHRONO_Y1 23
 
 /* Bouton "Melanger" en bas a droite */
 #define BTN_X0 244
