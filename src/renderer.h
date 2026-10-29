@@ -28,15 +28,35 @@
 #define BTN_Y1 195
 #define IN_BUTTON(x, y) ((x) >= BTN_X0 && (x) <= BTN_X1 && (y) >= BTN_Y0 && (y) <= BTN_Y1)
 
+/* Boutons carres "annuler" / "refaire", centres en bas de l'ecran */
+#define UNDO_X0 138
+#define UNDO_Y0 178
+#define UNDO_X1 155
+#define UNDO_Y1 195
+#define REDO_X0 164
+#define REDO_Y0 178
+#define REDO_X1 181
+#define REDO_Y1 195
+#define NAV_X0 UNDO_X0
+#define NAV_Y0 UNDO_Y0
+#define NAV_X1 REDO_X1
+#define NAV_Y1 REDO_Y1
+#define IN_UNDO(x, y) ((x) >= UNDO_X0 && (x) <= UNDO_X1 && (y) >= UNDO_Y0 && (y) <= UNDO_Y1)
+#define IN_REDO(x, y) ((x) >= REDO_X0 && (x) <= REDO_X1 && (y) >= REDO_Y0 && (y) <= REDO_Y1)
+
 void initRenderer();
 void fillRect(int x0, int y0, int x1, int y1, unsigned char color);
 void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed);
+void drawButtonEx(int x0, int y0, int x1, int y1, const char *text, int pressed, int enabled);
 void clearRect(int x0, int y0, int x1, int y1);
 void blitRect(int x0, int y0, int x1, int y1);
 /* Taille du curseur en fleche (point chaud = coin haut-gauche) */
 #define CURSOR_W 11
 #define CURSOR_H 16
 void drawCursorVRAM(int x, int y);
+void cursorToBuffer(int x, int y);
+void cursorFromBuffer(int x, int y);
+void blitRectCursor(int x0, int y0, int x1, int y1, int cx, int cy);
 void drawText(int x, int y, const char *str, unsigned char color);
 
 /* Retrouve la face coloree situee sous le pixel (px, py) */

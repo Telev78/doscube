@@ -14,7 +14,13 @@
 #include "lang.h"
 #include "control.h"
 #include "timer.h"
+#include "history.h"
 
+#define HISTORY_STEPS 6
+#define MOVE_MANUAL 0
+#define MOVE_UNDO 1
+#define MOVE_REDO 2
+#define MOVE_SHUFFLE 3
 #define ANIM_STEPS 12
 #define SHUFFLE_STEPS 4 // animation rapide pendant le mélange
 
@@ -163,6 +169,10 @@ int main(int argc, char *argv[])
     char timeText[16], lastTimeText[16];
     int chronoUpdated;
     lastTimeText[0] = 0;
+    int moveKind = MOVE_MANUAL;
+    int wantUndo = 0, wantRedo = 0, canUndo, canRedo;
+    int hAxis, hLayer, hSign;
+    unsigned savedCount;
 
     while (!quitRequested)
     {
@@ -171,18 +181,33 @@ int main(int argc, char *argv[])
         py = mouseY;
         busy = (anim.active || shuffling);
 
+        canUndo = !anim.active && !shuffling && gameState != 2 && histCanUndo();
+        canRedo = !anim.active && !shuffling && gameState != 2 && histCanRedo();
+
         // --- Clavier ---
         if (kbhit())
         {
             key = getch();
-            if (key == 27)
+            if (key == 0 || key == 224) // touche étendue : le code est dans l'octet suivant
+            {
+                key = getch();
+                if (key == 75)
+                    wantUndo = 1; // flèche gauche
+                else if (key == 77)
+                    wantRedo = 1; // flèche droite
+            }
+            else if (key == 27)
                 quitRequested = 1;
             else if (key == 'm' || key == 'M')
                 wantShuffle = 1;
+            else if (key == 'u' || key == 'U')
+                wantUndo = 1;
+            else if (key == 'r' || key == 'R')
+                wantRedo = 1;
             else if (key == 'l' || key == 'L')
             {
                 nextLanguage();
-                viewChanged = 1; // redessine le texte et le bouton
+                viewChanged = 1;
             }
         }
 
@@ -209,12 +234,21 @@ int main(int argc, char *argv[])
                 faceDrag = 1;
                 startX = px;
                 startY = py;
+                btnDown = 0;
                 if (IN_BUTTON(px, py))
-                {
                     btnDown = 1;
+                else if (IN_UNDO(px, py) && canUndo)
+                    btnDown = 2;
+                else if (IN_REDO(px, py) && canRedo)
+                    btnDown = 3;
+
+                if (btnDown)
+                {
                     moveDone = 1;
                     viewChanged = 1;
                 }
+                else if (IN_UNDO(px, py) || IN_REDO(px, py))
+                    moveDone = 1; // bouton grisé : on ignore le clic
                 else
                     moveDone = busy || !pickFace(px, py, owner, fIdx);
             }
@@ -234,6 +268,7 @@ int main(int argc, char *argv[])
                         anim.axis = axis;
                         anim.layer = layer;
                         anim.sign = sign;
+                        moveKind = MOVE_MANUAL;
                     }
                     moveDone = 1;
                 }
@@ -241,10 +276,14 @@ int main(int argc, char *argv[])
         }
         else if (!left)
         {
-            if (btnDown) // relâché : clic valide s'il est encore sur le bouton
+            if (btnDown)
             {
-                if (IN_BUTTON(px, py))
+                if (btnDown == 1 && IN_BUTTON(px, py))
                     wantShuffle = 1;
+                else if (btnDown == 2 && IN_UNDO(px, py))
+                    wantUndo = 1;
+                else if (btnDown == 3 && IN_REDO(px, py))
+                    wantRedo = 1;
                 btnDown = 0;
                 viewChanged = 1;
             }
@@ -261,6 +300,7 @@ int main(int argc, char *argv[])
             lastAxis = -1;
             lastLayer = 0;
             viewChanged = 1;
+            histClear();
         }
         wantShuffle = 0;
 
@@ -276,15 +316,52 @@ int main(int argc, char *argv[])
             anim.sign = sign;
             lastAxis = axis;
             lastLayer = layer;
+            moveKind = MOVE_SHUFFLE;
             shuffleLeft--;
         }
+
+        // --- Undo & Redo ---
+        if (wantUndo && !anim.active && !shuffling && gameState != 2 &&
+            histPeekUndo(hAxis, hLayer, hSign))
+        {
+            anim.active = 1;
+            anim.step = 0;
+            anim.steps = HISTORY_STEPS;
+            anim.axis = hAxis;
+            anim.layer = hLayer;
+            anim.sign = hSign;
+            moveKind = MOVE_UNDO;
+        }
+        else if (wantRedo && !anim.active && !shuffling && gameState != 2 &&
+                 histPeekRedo(hAxis, hLayer, hSign))
+        {
+            anim.active = 1;
+            anim.step = 0;
+            anim.steps = HISTORY_STEPS;
+            anim.axis = hAxis;
+            anim.layer = hLayer;
+            anim.sign = hSign;
+            moveKind = MOVE_REDO;
+        }
+        wantUndo = 0;
+        wantRedo = 0;
 
         // --- Avancement de l'animation ---
         if (anim.active && ++anim.step >= anim.steps)
         {
+            savedCount = myCube.moveCount;
             rotateLayer(myCube, anim.axis, anim.layer, anim.sign);
+            if (moveKind != MOVE_MANUAL)
+                myCube.moveCount = savedCount; // annuler/refaire/mélange ne comptent pas
             anim.active = 0;
             viewChanged = 1;
+
+            if (moveKind == MOVE_UNDO)
+                histCommitUndo();
+            else if (moveKind == MOVE_REDO)
+                histCommitRedo();
+            else if (moveKind == MOVE_MANUAL)
+                histPush(anim.axis, anim.layer, anim.sign);
 
             if (shuffling)
             {
@@ -302,7 +379,7 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-            else if (gameState == 1 && isSolved(myCube))
+            else if (moveKind == MOVE_MANUAL && gameState == 1 && isSolved(myCube))
             {
                 gameState = 2;
                 finalMoves = myCube.moveCount;
@@ -337,10 +414,18 @@ int main(int argc, char *argv[])
             drawText(4, 14, timeText, textColor);
             drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, T(S_BTN_SHUFFLE), btnDown);
 
+            canUndo = !anim.active && !shuffling && gameState != 2 && histCanUndo();
+            canRedo = !anim.active && !shuffling && gameState != 2 && histCanRedo();
+
+            drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, T(S_BTN_SHUFFLE), btnDown == 1);
+            drawButtonEx(UNDO_X0, UNDO_Y0, UNDO_X1, UNDO_Y1, "\033", btnDown == 2, canUndo);
+            drawButtonEx(REDO_X0, REDO_Y0, REDO_X1, REDO_Y1, "\032", btnDown == 3, canRedo);
+
             waitVSync();
-            blitRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
-            blitRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
-            blitRect(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1);
+            blitRectCursor(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1, px, py);
+            blitRectCursor(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1, px, py);
+            blitRectCursor(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, px, py);
+            blitRectCursor(NAV_X0, NAV_Y0, NAV_X1, NAV_Y1, px, py);
             strcpy(lastTimeText, timeText);
             viewChanged = 0;
         }
@@ -351,16 +436,16 @@ int main(int argc, char *argv[])
             {
                 clearRect(CHRONO_X0, CHRONO_Y0, CHRONO_X1, CHRONO_Y1);
                 drawText(4, 14, timeText, 15);
-                blitRect(CHRONO_X0, CHRONO_Y0, CHRONO_X1, CHRONO_Y1);
+                blitRectCursor(CHRONO_X0, CHRONO_Y0, CHRONO_X1, CHRONO_Y1, px, py);
                 strcpy(lastTimeText, timeText);
                 chronoUpdated = 1;
             }
         }
-        // --- Curseur : restauration de l'ancienne zone puis dessin en VRAM ---
-        if (redraw || chronoUpdated || px != lastPx || py != lastPy)
+        // --- Curseur : seulement s'il a bougé ---
+        if (px != lastPx || py != lastPy)
         {
-            blitRect(lastPx, lastPy, lastPx + CURSOR_W - 1, lastPy + CURSOR_H - 1);
-            drawCursorVRAM(px, py);
+            blitRect(lastPx, lastPy, lastPx + CURSOR_W - 1, lastPy + CURSOR_H - 1); // efface l'ancien
+            drawCursorVRAM(px, py);                                                 // dessine le nouveau
             lastPx = px;
             lastPy = py;
         }

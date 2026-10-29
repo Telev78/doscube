@@ -491,7 +491,7 @@ void clearRect(int x0, int y0, int x1, int y1)
 }
 
 /* Bouton en relief dans le back-buffer (texte centre, noir sur gris) */
-void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed)
+void drawButtonEx(int x0, int y0, int x1, int y1, const char *text, int pressed, int enabled)
 {
     int len = 0, tx, ty;
     const char *p = text;
@@ -508,7 +508,12 @@ void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed)
         len++;
     tx = x0 + ((x1 - x0 + 1) - len * 8) / 2 + (pressed ? 1 : 0);
     ty = y0 + ((y1 - y0 + 1) - 8) / 2 + (pressed ? 1 : 0);
-    drawText(tx, ty, text, 0);
+    drawText(tx, ty, text, enabled ? 0 : 8); /* gris fonce si desactive */
+}
+
+void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed)
+{
+    drawButtonEx(x0, y0, x1, y1, text, pressed, 1);
 }
 
 void blitRect(int x0, int y0, int x1, int y1)
@@ -571,6 +576,66 @@ void drawCursorVRAM(int x, int y)
             *((unsigned char far *)MK_FP(0xA000, rowOffset[py] + px)) = (c == 'X') ? 0 : 15;
         }
     }
+}
+
+/* Pour qu'un blit ne fasse jamais disparaitre le curseur (scintillement) :
+   on dessine temporairement le curseur DANS le back-buffer avant de copier une
+   zone qui le recouvre, puis on remet les pixels d'origine. */
+static unsigned char cursorUnder[CURSOR_W * CURSOR_H];
+
+void cursorToBuffer(int x, int y)
+{
+    int row, col, px, py;
+    char c;
+
+    for (row = 0; row < CURSOR_H; row++)
+    {
+        py = y + row;
+        if (py < 0 || py >= 200)
+            continue;
+        for (col = 0; col < CURSOR_W; col++)
+        {
+            c = cursorShape[row][col];
+            px = x + col;
+            if (c == ' ' || px < 0 || px >= 320)
+                continue;
+            cursorUnder[row * CURSOR_W + col] = backBuffer[rowOffset[py] + px];
+            backBuffer[rowOffset[py] + px] = (c == 'X') ? 0 : 15;
+        }
+    }
+}
+
+void cursorFromBuffer(int x, int y)
+{
+    int row, col, px, py;
+    char c;
+
+    for (row = 0; row < CURSOR_H; row++)
+    {
+        py = y + row;
+        if (py < 0 || py >= 200)
+            continue;
+        for (col = 0; col < CURSOR_W; col++)
+        {
+            c = cursorShape[row][col];
+            px = x + col;
+            if (c == ' ' || px < 0 || px >= 320)
+                continue;
+            backBuffer[rowOffset[py] + px] = cursorUnder[row * CURSOR_W + col];
+        }
+    }
+}
+
+/* Copie une zone vers l'ecran en conservant le curseur s'il la recouvre */
+void blitRectCursor(int x0, int y0, int x1, int y1, int cx, int cy)
+{
+    int hit = !(cx + CURSOR_W - 1 < x0 || cx > x1 || cy + CURSOR_H - 1 < y0 || cy > y1);
+
+    if (hit)
+        cursorToBuffer(cx, cy);
+    blitRect(x0, y0, x1, y1);
+    if (hit)
+        cursorFromBuffer(cx, cy);
 }
 
 /* Table des caracteres 128..255 (8 octets chacun) : vecteur INT 1Fh.
