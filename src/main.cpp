@@ -11,7 +11,7 @@
 #include "cube.h"
 #include "mouse.h"
 #include "renderer.h"
-#include "common.h"
+#include "lang.h"
 #include "control.h"
 
 #define ANIM_STEPS 12
@@ -107,21 +107,23 @@ void printText(int col, int row, const char *str, unsigned char color)
     }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    initLanguage(argc, argv);
+
     RubikCube myCube;
     initCube(myCube);
 
     // 1. Basculement en Mode 13h (320x200, 256 couleurs)
     if (!detectVGA())
     {
-        printf("\n%s\n", STR_ERR_NO_VGA);
+        printf("\n%s\n", T(S_ERR_NO_VGA));
         return 1;
     }
 
     if (!initMode13h())
     {
-        printf("\n%s\n", STR_ERR_MODE13);
+        printf("\n%s\n", T(S_ERR_MODE13));
         return 1;
     }
     atexit(closeMode13h); // restauration garantie, quelle que soit la sortie
@@ -133,13 +135,13 @@ int main()
     if (numButtons == 0)
     {
         closeMode13h();
-        printf("%s\n", STR_ERR_NO_MOUSE);
+        printf("%s\n", T(S_ERR_NO_MOUSE));
         return 1;
     }
     if (numButtons != -1 && numButtons < 2)
     {
         closeMode13h();
-        printf("\n%s\n", STR_ERR_MOUSE_BUTTONS);
+        printf("\n%s\n", T(S_ERR_MOUSE_BUTTONS));
         return 1;
     }
 
@@ -170,6 +172,11 @@ int main()
                 quitRequested = 1;
             else if (key == 'm' || key == 'M')
                 wantShuffle = 1;
+            else if (key == 'l' || key == 'L')
+            {
+                nextLanguage();
+                viewChanged = 1; // redessine le texte et le bouton
+            }
         }
 
         // --- Clic droit : rotation de la vue ---
@@ -239,7 +246,7 @@ int main()
         if (wantShuffle && !busy)
         {
             srand((unsigned)biostime(0, 0));
-            shuffleLeft = 20 + rand() % 21; // 20 à 40 rotations
+            shuffleLeft = 30 + rand() % 11; // 30 à 40 rotations
             shuffling = 1;
             gameState = 0;
             lastAxis = -1;
@@ -303,18 +310,18 @@ int main()
 
             textColor = 15;
             if (shuffling)
-                strcpy(moveText, STR_SHUFFLING);
+                strcpy(moveText, T(S_SHUFFLING));
             else if (gameState == 2)
             {
-                sprintf(moveText, STR_SOLVED, finalMoves);
+                sprintf(moveText, T(S_SOLVED), finalMoves);
                 textColor = 14;
             }
             else
-                sprintf(moveText, STR_MOVES, myCube.moveCount);
+                sprintf(moveText, T(S_MOVES), myCube.moveCount);
 
             clearRect(HUD_X0, HUD_Y0, HUD_X1, HUD_Y1);
             drawText(4, 2, moveText, textColor);
-            drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, STR_BTN_SHUFFLE, btnDown);
+            drawButton(BTN_X0, BTN_Y0, BTN_X1, BTN_Y1, T(S_BTN_SHUFFLE), btnDown);
 
             waitVSync();
             blitRect(VIEW_X0, VIEW_Y0, VIEW_X1, VIEW_Y1);
@@ -326,7 +333,7 @@ int main()
         // --- Curseur : restauration de l'ancienne zone puis dessin en VRAM ---
         if (redraw || px != lastPx || py != lastPy)
         {
-            blitRect(lastPx - 3, lastPy - 3, lastPx + 3, lastPy + 3);
+            blitRect(lastPx, lastPy, lastPx + CURSOR_W - 1, lastPy + CURSOR_H - 1);
             drawCursorVRAM(px, py);
             lastPx = px;
             lastPy = py;

@@ -530,33 +530,86 @@ void blitRect(int x0, int y0, int x1, int y1)
                  (unsigned char far *)backBuffer + rowOffset[y] + x0, w);
 }
 
+/* Fleche : X = contour noir, O = interieur blanc. Le point chaud est le coin
+   haut-gauche. Le contour noir la rend visible sur le blanc et le jaune. */
+static const char *const cursorShape[CURSOR_H] = {
+    "X          ",
+    "XX         ",
+    "XOX        ",
+    "XOOX       ",
+    "XOOOX      ",
+    "XOOOOX     ",
+    "XOOOOOX    ",
+    "XOOOOOOX   ",
+    "XOOOOOOOX  ",
+    "XOOOOOXXXX ",
+    "XOOXOOX    ",
+    "XOX XOOX   ",
+    "XX  XOOX   ",
+    "X    XOOX  ",
+    "     XOOX  ",
+    "      XX   "};
+
 void drawCursorVRAM(int x, int y)
 {
-    int i;
-    for (i = -3; i <= 3; i++)
+    int row, col, px, py;
+    char c;
+
+    for (row = 0; row < CURSOR_H; row++)
     {
-        if (x + i >= 0 && x + i < 320 && y >= 0 && y < 200)
-            *((unsigned char far *)MK_FP(0xA000, rowOffset[y] + x + i)) = 15;
-        if (y + i >= 0 && y + i < 200 && x >= 0 && x < 320)
-            *((unsigned char far *)MK_FP(0xA000, rowOffset[y + i] + x)) = 15;
+        py = y + row;
+        if (py < 0 || py >= 200)
+            continue;
+        for (col = 0; col < CURSOR_W; col++)
+        {
+            c = cursorShape[row][col];
+            if (c == ' ')
+                continue;
+            px = x + col;
+            if (px < 0 || px >= 320)
+                continue;
+            *((unsigned char far *)MK_FP(0xA000, rowOffset[py] + px)) = (c == 'X') ? 0 : 15;
+        }
     }
 }
 
-/* Texte dans le back-buffer avec la police 8x8 de la ROM (F000:FA6E) */
+/* Table des caracteres 128..255 (8 octets chacun) : vecteur INT 1Fh.
+   Retourne 0 si le vecteur n'est pas initialise. */
+static unsigned char far *upperFont()
+{
+    unsigned char far *far *vec = (unsigned char far * far *)MK_FP(0, 0x1F * 4);
+    unsigned char far *p = *vec;
+    if (FP_SEG(p) == 0 && FP_OFF(p) == 0)
+        return 0;
+    return p;
+}
+
+/* Texte dans le back-buffer avec les polices 8x8 du BIOS :
+   0..127 en ROM (F000:FA6E), 128..255 via INT 1Fh (accents CP437/850) */
 void drawText(int x, int y, const char *str, unsigned char color)
 {
-    unsigned char far *font = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
+    unsigned char far *lowFont = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
+    unsigned char far *highFont = upperFont();
+    unsigned char far *glyph;
     int row, bit, px, py;
-    unsigned char bits;
+    unsigned char bits, ch;
 
     while (*str)
     {
+        ch = (unsigned char)*str;
+        if (ch < 128)
+            glyph = lowFont + (unsigned)ch * 8;
+        else if (highFont)
+            glyph = highFont + (unsigned)(ch - 128) * 8;
+        else
+            glyph = lowFont + (unsigned)'?' * 8;
+
         for (row = 0; row < 8; row++)
         {
             py = y + row;
             if (py < 0 || py >= 200)
                 continue;
-            bits = font[(unsigned)(unsigned char)*str * 8 + row];
+            bits = glyph[row];
             for (bit = 0; bit < 8; bit++)
             {
                 if (bits & (0x80 >> bit))

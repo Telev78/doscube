@@ -337,7 +337,7 @@ void randomMove(int lastAxis, int lastLayer, int &axis, int &layer, int &sign)
     do
     {
         axis = rand() % 3;
-        layer = (rand() % 2) ? 1 : -1;
+        layer = (rand() % 3) - 1; // -1, 0 ou 1p
     } while (axis == lastAxis && layer == lastLayer);
     sign = (rand() % 2) ? 1 : -1;
 }

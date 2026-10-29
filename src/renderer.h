@@ -27,6 +27,9 @@ void fillRect(int x0, int y0, int x1, int y1, unsigned char color);
 void drawButton(int x0, int y0, int x1, int y1, const char *text, int pressed);
 void clearRect(int x0, int y0, int x1, int y1);
 void blitRect(int x0, int y0, int x1, int y1);
+/* Taille du curseur en fleche (point chaud = coin haut-gauche) */
+#define CURSOR_W 11
+#define CURSOR_H 16
 void drawCursorVRAM(int x, int y);
 void drawText(int x, int y, const char *str, unsigned char color);
 
