@@ -32,7 +32,8 @@ BUILD_OBJS = $(BUILD_DIR)\main.obj \
 			 $(BUILD_DIR)\history.obj \
 			 $(BUILD_DIR)\options.obj \
 			 $(BUILD_DIR)\cpu.obj \
-			 $(BUILD_DIR)\about.obj
+			 $(BUILD_DIR)\about.obj \
+			 $(BUILD_DIR)\video.obj
 
 # 1. RÈGLE DE LIAISON FINALE
 $(TARGET): $(BUILD_OBJS)

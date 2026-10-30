@@ -133,6 +133,8 @@ Depuis `PROJECT\`, la commande `make` produit la version Release (modèle medium
 |---|---|
 | `main.cpp` | Boucle principale, gestion de la souris et du clavier, déroulement d'une partie |
 | `cube.cpp` / `cube.h` | Modèle du cube (26 pièces), rotations des tranches, mélange, détection de victoire |
+| `control.cpp` / `control.h` | Entrées : souris, clavier, boutons, et interprétation des glissements sur une face (computeMove) |
+| `video.cpp` / `video.h` |	Mode graphique 13h : détection VGA, passage et restauration du mode, tampon d’écran, synchronisation verticale |
 | `renderer.cpp` / `renderer.h` | Rendu 3D en entiers, remplissage des faces, boutons, texte, curseur, orientation de la vue |
 | `mouse.cpp` / `mouse.h` | Pilote de souris (`INT 33h`) |
 | `history.cpp` / `history.h` | Historique des coups (annuler / refaire) |
