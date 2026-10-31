@@ -4,6 +4,22 @@
 
 Le jeu a été pensé pour tourner sur des machines modestes, jusqu'au 286 sans coprocesseur.
 
+## Captures d'écran
+
+![Une partie complète de DosCube](docs/screenshots/cube.gif)
+
+*Une partie complète, du mélange à la résolution.*
+
+| Écran principal | Cube mélangé | Cube résolu |
+|---|---|---|
+| ![Écran principal](docs/screenshots/MainScreen.png) | ![Cube mélangé](docs/screenshots/ShuffledCube.png) | ![Cube résolu](docs/screenshots/SolvedCube.png) |
+
+### Fenêtre « À propos / aide » en trois langues
+
+| English | Français | Deutsch |
+|---|---|---|
+| ![Fenêtre À propos en anglais](docs/screenshots/EnglishAbout.png) | ![Fenêtre À propos en français](docs/screenshots/FrenchAbout.png) | ![Fenêtre À propos en allemand](docs/screenshots/GermanAbout.png) |
+
 ## Fonctionnalités
 
 * **Cube 3D complet** : 26 pièces, rendu en mode 13h avec élimination des faces cachées et tri en profondeur.
