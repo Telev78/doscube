@@ -44,6 +44,11 @@ struct RubikCube
     int timerRunning;          // État du chrono (0: pause, 1: en cours)
 };
 
+/* Axe (0=X, 1=Y, 2=Z) et sens (+1/-1) de la normale de chacune des 6 faces :
+   0 Haut, 1 Bas, 2 Gauche, 3 Droite, 4 Avant, 5 Arriere */
+extern const int faceAxis[6];
+extern const int faceSign[6];
+
 void initCube(RubikCube &cube);
 // Fonctions de rotation des faces
 void rotateX(RubikCube &cube, int targetX, int clockwise);

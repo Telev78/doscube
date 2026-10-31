@@ -7,9 +7,6 @@
 #include "renderer.h"
 #include "control.h"
 
-static const int faceAxis[6] = {1, 1, 0, 0, 2, 2};    // axe de la normale de chaque face
-static const int faceSign[6] = {1, -1, -1, 1, 1, -1}; // son sens
-
 static int levi(int i, int j, int k) // signe de la permutation (i,j,k) de {0,1,2}
 {
     return (((j - i + 3) % 3) == 1 && ((k - j + 3) % 3) == 1) ? 1 : -1;

@@ -37,10 +37,6 @@ static Face3D facesToDraw[MAX_FACES];
 static int order[MAX_FACES];
 static int faceCount = 0;
 
-/* Axe (0=X 1=Y 2=Z) et sens de la normale de chaque face */
-static const signed char faceAxis[6] = {1, 1, 0, 0, 2, 2};
-static const signed char faceSign[6] = {1, -1, -1, 1, 1, -1};
-
 static const signed char faceTemplates[6][4][3] = {
     {{-1, 1, -1}, {1, 1, -1}, {1, 1, 1}, {-1, 1, 1}},     /* 0: Haut    */
     {{-1, -1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, -1, -1}}, /* 1: Bas     */

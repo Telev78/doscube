@@ -1,6 +1,9 @@
 #include "cube.h"
 #include <stdlib.h>
 
+extern const int faceAxis[6] = {1, 1, 0, 0, 2, 2};
+extern const int faceSign[6] = {1, -1, -1, 1, 1, -1};
+
 // Initialise une pièce à la position (x, y, z) : une face colorée par coordonnée à ±1
 static void setupPiece(Cubie &p, int x, int y, int z)
 {
@@ -303,8 +306,6 @@ void rotateLayer(RubikCube &cube, int axis, int layer, int sign)
 // (fonctionne même si les tranches centrales ont déplacé les centres)
 int isSolved(const RubikCube &cube)
 {
-    static const int fAxis[6] = {1, 1, 0, 0, 2, 2};
-    static const int fSign[6] = {1, -1, -1, 1, 1, -1};
     int f, i, coord, ref, c;
     const Point3D *p;
 
@@ -314,9 +315,9 @@ int isSolved(const RubikCube &cube)
         for (i = 0; i < 26; i++)
         {
             p = &cube.pieces[i].currentPos;
-            coord = (fAxis[f] == 0) ? p->x : (fAxis[f] == 1) ? p->y
-                                                             : p->z;
-            if (coord != fSign[f])
+            coord = (faceAxis[f] == 0) ? p->x : (faceAxis[f] == 1) ? p->y
+                                                                   : p->z;
+            if (coord != faceSign[f])
                 continue;
             c = cube.pieces[i].faceColors[f];
             if (c == COLOR_NONE)
