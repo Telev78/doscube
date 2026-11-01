@@ -115,6 +115,7 @@ void inputUpdate(Input &in, const RubikCube &cube, int busy, int canUndo, int ca
     // --- Clic droit : rotation de la vue ---
     if (in.right)
     {
+        in.moveDone = 1;
         if (in.viewDrag && (in.px != in.prevX || in.py != in.prevY))
         {
             rotateView(DRAG_X_SIGN * (in.px - in.prevX), DRAG_Y_SIGN * (in.py - in.prevY));

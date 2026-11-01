@@ -4,14 +4,41 @@
 extern const int faceAxis[6] = {1, 1, 0, 0, 2, 2};
 extern const int faceSign[6] = {1, -1, -1, 1, 1, -1};
 
+static int coordOf(const Point3D &p, int axis)
+{
+    if (axis == 0)
+        return p.x;
+    if (axis == 1)
+        return p.y;
+    return p.z;
+}
+
+static void setCoord(Point3D &p, int axis, int value)
+{
+    if (axis == 0)
+        p.x = value;
+    else if (axis == 1)
+        p.y = value;
+    else
+        p.z = value;
+}
+
+// Indice de la face (0..5) dont la normale est +axe (sign > 0) ou -axe (sign < 0)
+static int faceIndex(int axis, int sign)
+{
+    static const int idx[3][2] = {{3, 2},  // X : Droite, Gauche
+                                  {0, 1},  // Y : Haut, Bas
+                                  {4, 5}}; // Z : Avant, Arrière
+    return idx[axis][sign > 0 ? 0 : 1];
+}
+
 // Initialise une pièce à la position (x, y, z) : une face colorée par coordonnée à ±1
 static void setupPiece(Cubie &p, int x, int y, int z)
 {
     int f;
-    p.originalPos.x = x;
-    p.originalPos.y = y;
-    p.originalPos.z = z;
-    p.currentPos = p.originalPos;
+    p.currentPos.x = x;
+    p.currentPos.y = y;
+    p.currentPos.z = z;
 
     for (f = 0; f < 6; f++)
         p.faceColors[f] = COLOR_NONE;
@@ -36,10 +63,6 @@ void initCube(RubikCube &cube)
     int index = 0;
 
     cube.moveCount = 0;
-    cube.isMixed = 0;
-    cube.startTime = 0;
-    cube.elapsedTime = 0;
-    cube.timerRunning = 0;
 
     for (x = -1; x <= 1; x++)
         for (y = -1; y <= 1; y++)
@@ -52,254 +75,51 @@ void initCube(RubikCube &cube)
             }
 }
 
-// --- ROTATION AUTOUR DE L'AXE X (targetX = 1 pour Droite, -1 pour Gauche) ---
-void rotateX(RubikCube &cube, int targetX, int clockwise)
-{
-    int indices[9];
-    int count = 0;
-    int i, k, f, idx;
-    int y, z;
-    Point3D newPos[9];
-    unsigned char newColors[9][6];
-    unsigned char c0, c1, c4, c5;
-    int actualClockwise;
-
-    for (i = 0; i < 26; i++)
-    {
-        if (cube.pieces[i].currentPos.x == targetX)
-        {
-            indices[count++] = i;
-        }
-    }
-
-    actualClockwise = (targetX == 1) ? clockwise : !clockwise;
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        y = cube.pieces[idx].currentPos.y;
-        z = cube.pieces[idx].currentPos.z;
-
-        newPos[k].x = targetX;
-        if (actualClockwise)
-        {
-            newPos[k].y = -z;
-            newPos[k].z = y;
-        }
-        else
-        {
-            newPos[k].y = z;
-            newPos[k].z = -y;
-        }
-
-        for (f = 0; f < 6; f++)
-        {
-            newColors[k][f] = cube.pieces[idx].faceColors[f];
-        }
-
-        c0 = cube.pieces[idx].faceColors[0];
-        c1 = cube.pieces[idx].faceColors[1];
-        c4 = cube.pieces[idx].faceColors[4];
-        c5 = cube.pieces[idx].faceColors[5];
-
-        if (actualClockwise)
-        {
-            newColors[k][4] = c0; // Haut -> Avant
-            newColors[k][1] = c4; // Avant -> Bas
-            newColors[k][5] = c1; // Bas -> Arrière
-            newColors[k][0] = c5; // Arrière -> Haut
-        }
-        else
-        {
-            newColors[k][5] = c0; // Haut -> Arrière
-            newColors[k][1] = c5; // Arrière -> Bas
-            newColors[k][4] = c1; // Bas -> Avant
-            newColors[k][0] = c4; // Avant -> Haut
-        }
-    }
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        cube.pieces[idx].currentPos = newPos[k];
-        for (f = 0; f < 6; f++)
-        {
-            cube.pieces[idx].faceColors[f] = newColors[k][f];
-        }
-    }
-
-    cube.moveCount++;
-}
-
-// --- ROTATION AUTOUR DE L'AXE Y (targetY = 1 pour Haut, -1 pour Bas) ---
-void rotateY(RubikCube &cube, int targetY, int clockwise)
-{
-    int indices[9];
-    int count = 0;
-    int i, k, f, idx;
-    int x, z;
-    Point3D newPos[9];
-    unsigned char newColors[9][6];
-    unsigned char c2, c3, c4, c5;
-    int actualClockwise;
-
-    for (i = 0; i < 26; i++)
-    {
-        if (cube.pieces[i].currentPos.y == targetY)
-        {
-            indices[count++] = i;
-        }
-    }
-
-    actualClockwise = (targetY == 1) ? clockwise : !clockwise;
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        x = cube.pieces[idx].currentPos.x;
-        z = cube.pieces[idx].currentPos.z;
-
-        newPos[k].y = targetY;
-        if (actualClockwise)
-        {
-            newPos[k].x = z;
-            newPos[k].z = -x;
-        }
-        else
-        {
-            newPos[k].x = -z;
-            newPos[k].z = x;
-        }
-
-        for (f = 0; f < 6; f++)
-        {
-            newColors[k][f] = cube.pieces[idx].faceColors[f];
-        }
-
-        c2 = cube.pieces[idx].faceColors[2];
-        c3 = cube.pieces[idx].faceColors[3];
-        c4 = cube.pieces[idx].faceColors[4];
-        c5 = cube.pieces[idx].faceColors[5];
-
-        if (actualClockwise)
-        {
-            newColors[k][3] = c4; // Avant -> Droite
-            newColors[k][5] = c3; // Droite -> Arrière
-            newColors[k][2] = c5; // Arrière -> Gauche
-            newColors[k][4] = c2; // Gauche -> Avant
-        }
-        else
-        {
-            newColors[k][2] = c4; // Avant -> Gauche
-            newColors[k][5] = c2; // Gauche -> Arrière
-            newColors[k][3] = c5; // Arrière -> Droite
-            newColors[k][4] = c3; // Droite -> Avant
-        }
-    }
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        cube.pieces[idx].currentPos = newPos[k];
-        for (f = 0; f < 6; f++)
-        {
-            cube.pieces[idx].faceColors[f] = newColors[k][f];
-        }
-    }
-
-    cube.moveCount++;
-}
-
-// --- ROTATION AUTOUR DE L'AXE Z (targetZ = 1 pour Avant, -1 pour Arrière) ---
-void rotateZ(RubikCube &cube, int targetZ, int clockwise)
-{
-    int indices[9];
-    int count = 0;
-    int i, k, f, idx;
-    int x, y;
-    Point3D newPos[9];
-    unsigned char newColors[9][6];
-    unsigned char c0, c1, c2, c3;
-    int actualClockwise;
-
-    for (i = 0; i < 26; i++)
-    {
-        if (cube.pieces[i].currentPos.z == targetZ)
-        {
-            indices[count++] = i;
-        }
-    }
-
-    actualClockwise = (targetZ == 1) ? clockwise : !clockwise;
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        x = cube.pieces[idx].currentPos.x;
-        y = cube.pieces[idx].currentPos.y;
-
-        newPos[k].z = targetZ;
-        if (actualClockwise)
-        {
-            newPos[k].x = y;
-            newPos[k].y = -x;
-        }
-        else
-        {
-            newPos[k].x = -y;
-            newPos[k].y = x;
-        }
-
-        for (f = 0; f < 6; f++)
-        {
-            newColors[k][f] = cube.pieces[idx].faceColors[f];
-        }
-
-        c0 = cube.pieces[idx].faceColors[0];
-        c1 = cube.pieces[idx].faceColors[1];
-        c2 = cube.pieces[idx].faceColors[2];
-        c3 = cube.pieces[idx].faceColors[3];
-
-        if (actualClockwise)
-        {
-            newColors[k][3] = c0; // Haut -> Droite
-            newColors[k][1] = c3; // Droite -> Bas
-            newColors[k][2] = c1; // Bas -> Gauche
-            newColors[k][0] = c2; // Gauche -> Haut
-        }
-        else
-        {
-            newColors[k][2] = c0; // Haut -> Gauche
-            newColors[k][1] = c2; // Gauche -> Bas
-            newColors[k][3] = c1; // Bas -> Droite
-            newColors[k][0] = c3; // Droite -> Haut
-        }
-    }
-
-    for (k = 0; k < count; k++)
-    {
-        idx = indices[k];
-        cube.pieces[idx].currentPos = newPos[k];
-        for (f = 0; f < 6; f++)
-        {
-            cube.pieces[idx].faceColors[f] = newColors[k][f];
-        }
-    }
-
-    cube.moveCount++;
-}
-
-// axis: 0=X 1=Y 2=Z ; layer: -1 ou 1 ; sign: +1 = +90° règle de la main droite autour de +axis
+/* Rotation de 90° d'une tranche (règle de la main droite autour de +axis si sign > 0).
+   Pour l'axe a, on note u et v les deux autres axes, de sorte que (a, u, v) soit une
+   permutation circulaire de (X, Y, Z). Une rotation de +90° envoie :
+     - la position (u, v) sur (-v, u) ;
+     - la face +u sur +v, +v sur -u, -u sur -v et -v sur +u (anneau ring[0..3]).
+   Chaque pièce ne dépend que de son propre état : la mise à jour se fait sur place. */
 void rotateLayer(RubikCube &cube, int axis, int layer, int sign)
 {
-    int A = (axis == 2) ? (sign < 0) : (sign > 0);
-    int cw = (layer == 1) ? A : !A;
-    if (axis == 0)
-        rotateX(cube, layer, cw);
-    else if (axis == 1)
-        rotateY(cube, layer, cw);
-    else
-        rotateZ(cube, layer, cw);
+    int u = (axis + 1) % 3;
+    int v = (axis + 2) % 3;
+    int dir = (sign > 0) ? 1 : 3; // avance de 1 ou de -1 dans l'anneau
+    int ring[4];
+    int i, k, pu, pv;
+    unsigned char old[6];
+    Cubie *p;
+
+    ring[0] = faceIndex(u, 1);
+    ring[1] = faceIndex(v, 1);
+    ring[2] = faceIndex(u, -1);
+    ring[3] = faceIndex(v, -1);
+
+    for (i = 0; i < 26; i++)
+    {
+        p = &cube.pieces[i];
+        if (coordOf(p->currentPos, axis) != layer)
+            continue;
+
+        pu = coordOf(p->currentPos, u);
+        pv = coordOf(p->currentPos, v);
+        if (sign > 0)
+        {
+            setCoord(p->currentPos, u, -pv);
+            setCoord(p->currentPos, v, pu);
+        }
+        else
+        {
+            setCoord(p->currentPos, u, pv);
+            setCoord(p->currentPos, v, -pu);
+        }
+
+        for (k = 0; k < 6; k++)
+            old[k] = p->faceColors[k];
+        for (k = 0; k < 4; k++)
+            p->faceColors[ring[(k + dir) & 3]] = old[ring[k]];
+    }
 }
 
 // 1 si chacune des 6 faces n'a qu'une seule couleur
@@ -315,8 +135,7 @@ int isSolved(const RubikCube &cube)
         for (i = 0; i < 26; i++)
         {
             p = &cube.pieces[i].currentPos;
-            coord = (faceAxis[f] == 0) ? p->x : (faceAxis[f] == 1) ? p->y
-                                                                   : p->z;
+            coord = coordOf(*p, faceAxis[f]);
             if (coord != faceSign[f])
                 continue;
             c = cube.pieces[i].faceColors[f];
@@ -331,14 +150,14 @@ int isSolved(const RubikCube &cube)
     return 1;
 }
 
-// Tire une face au hasard (couche extérieure) et un sens, en évitant de
-// retomber sur la même face que le coup précédent
+// Tire une tranche au hasard (face extérieure ou tranche centrale) et un sens,
+// en évitant de retomber sur la même tranche que le coup précédent
 void randomMove(int lastAxis, int lastLayer, int &axis, int &layer, int &sign)
 {
     do
     {
         axis = rand() % 3;
-        layer = (rand() % 3) - 1; // -1, 0 ou 1p
+        layer = (rand() % 3) - 1; // -1, 0 ou 1
     } while (axis == lastAxis && layer == lastLayer);
     sign = (rand() % 2) ? 1 : -1;
 }

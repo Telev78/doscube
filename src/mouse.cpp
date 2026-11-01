@@ -5,30 +5,31 @@
 int initMouse()
 {
     REGS inRegs, outRegs;
+    int buttons;
+
     inRegs.x.ax = 0x0000; // Fonction 0 : Initialisation du driver de souris
     int86(0x33, &inRegs, &outRegs);
 
-    // Si AX == 0xFFFF, la souris est présente. Retourne le nombre de boutons, sinon 0.
-    return (outRegs.x.ax == 0xFFFF) ? outRegs.x.bx : 0;
-}
+    // Si AX == 0xFFFF, la souris est présente. Sinon retourne 0.
+    if (outRegs.x.ax != 0xFFFF)
+        return 0;
+    buttons = outRegs.x.bx;
 
-// 2. Afficher le curseur (AX = 0x0001)
-void showMouseCursor()
-{
-    REGS inRegs, outRegs;
-    inRegs.x.ax = 0x0001;
+    // Plage explicite : X 0..639 (2 unités par pixel), Y 0..199
+    inRegs.x.ax = 0x0007;
+    inRegs.x.cx = 0;
+    inRegs.x.dx = 639;
     int86(0x33, &inRegs, &outRegs);
-}
 
-// 3. Masquer le curseur (AX = 0x0002)
-void hideMouseCursor()
-{
-    REGS inRegs, outRegs;
-    inRegs.x.ax = 0x0002;
+    inRegs.x.ax = 0x0008;
+    inRegs.x.cx = 0;
+    inRegs.x.dx = 199;
     int86(0x33, &inRegs, &outRegs);
+
+    return buttons;
 }
 
-// 4. Obtenir la position (X, Y) et l'état du clic (AX = 0x0003)
+// 2. Obtenir la position (X, Y) et l'état du clic (AX = 0x0003)
 void getMouseStatus(int &x, int &y, int &leftButton, int &rightButton)
 {
     REGS inRegs, outRegs;

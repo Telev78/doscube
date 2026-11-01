@@ -22,7 +22,7 @@
 // Taille de la pile à 16ko
 extern unsigned _stklen = 16384U;
 
-static volatile int quitRequested = 0;
+volatile int quitRequested = 0;
 
 // Ctrl+Break : on demande simplement la sortie propre de la boucle
 int ctrlBreakHandler()
@@ -115,7 +115,6 @@ int main(int argc, char *argv[])
     int moveKind = MOVE_MANUAL;
     int canUndo, canRedo;
     int hAxis, hLayer, hSign;
-    unsigned savedCount;
     int resumeTimer;
 
     lastTimeText[0] = 0;
@@ -240,10 +239,9 @@ int main(int argc, char *argv[])
         // --- Avancement de l'animation ---
         if (anim.active && ++anim.step >= anim.steps)
         {
-            savedCount = myCube.moveCount;
             rotateLayer(myCube, anim.axis, anim.layer, anim.sign);
-            if (moveKind != MOVE_MANUAL)
-                myCube.moveCount = savedCount; // annuler/refaire/mélange ne comptent pas
+            if (moveKind == MOVE_MANUAL)
+                myCube.moveCount++; // seuls les coups du joueur comptent
             anim.active = 0;
             viewChanged = 1;
 
@@ -264,7 +262,6 @@ int main(int argc, char *argv[])
                     {
                         shuffling = 0;
                         myCube.moveCount = 0; // le compteur ne compte que le joueur
-                        myCube.isMixed = 1;
                         gameState = 1;
                         timerReset();
                     }
@@ -275,7 +272,6 @@ int main(int argc, char *argv[])
                 gameState = 2;
                 finalMoves = myCube.moveCount;
                 timerStop();
-                myCube.isMixed = 0;
             }
         }
 

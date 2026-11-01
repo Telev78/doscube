@@ -2,9 +2,7 @@
 #include <mem.h>
 #include <dos.h>
 #include "renderer.h"
-
-/* Tampon partage, defini dans main.cpp */
-extern unsigned char far backBuffer[];
+#include "video.h"
 
 #define SPACING 28 /* distance entre deux cubies (pixels)            */
 #define HS 12      /* demi-taille d'un autocollant (pixels)          */
@@ -101,12 +99,15 @@ static int cosI(int a)
     return (cosQ(a) + 32) >> 6;
 }
 
+static void initFonts();
+
 void initRenderer()
 {
     int y;
     for (y = 0; y < 200; y++)
         rowOffset[y] = (unsigned)y * 320U;
     initTrig();
+    initFonts();
     resetView(30, 315);
 }
 
@@ -212,7 +213,7 @@ static void buildVecs(int m[3][3], ViewVecs &v)
     int k, f, my;
     for (k = 0; k < 3; k++)
     {
-        my = m[1][k] * 5 / 6; /* correction d'aspect 4/3 */
+        my = m[1][k] * 5 / 6; // pixels du mode 13h plus hauts que larges (facteur 5/6)
         v.ux[k] = m[0][k] * SPACING;
         v.uy[k] = my * SPACING;
         v.uz[k] = m[2][k] * SPACING;
@@ -579,7 +580,7 @@ void drawCursorVRAM(int x, int y)
    zone qui le recouvre, puis on remet les pixels d'origine. */
 static unsigned char cursorUnder[CURSOR_W * CURSOR_H];
 
-void cursorToBuffer(int x, int y)
+static void cursorToBuffer(int x, int y)
 {
     int row, col, px, py;
     char c;
@@ -601,7 +602,7 @@ void cursorToBuffer(int x, int y)
     }
 }
 
-void cursorFromBuffer(int x, int y)
+static void cursorFromBuffer(int x, int y)
 {
     int row, col, px, py;
     char c;
@@ -645,12 +646,44 @@ static unsigned char far *upperFont()
     return p;
 }
 
+/* Polices 8x8 utilisees par drawText / drawTextScaled (remplies par initFonts) */
+static unsigned char far *fontLow = 0;  /* caracteres 0..127   */
+static unsigned char far *fontHigh = 0; /* caracteres 128..255 */
+
+/* Pointeur vers une table 8x8 du BIOS video (INT 10h, fonction 1130h) :
+   which = 3 -> caracteres 0..127, which = 4 -> caracteres 128..255.
+   Retourne 0 si le BIOS ne renseigne rien. */
+static unsigned char far *biosFont8x8(int which)
+{
+    struct REGPACK r;
+
+    r.r_ax = 0x1130;
+    r.r_bx = (unsigned)which << 8; /* BH = which, BL = 0 */
+    r.r_cx = 0;
+    r.r_dx = 0;
+    r.r_bp = 0;
+    r.r_es = 0;
+    intr(0x10, &r);
+    if (r.r_es == 0 && r.r_bp == 0)
+        return 0;
+    return (unsigned char far *)MK_FP(r.r_es, r.r_bp);
+}
+
+static void initFonts()
+{
+    fontLow = biosFont8x8(3);
+    if (!fontLow)
+        fontLow = (unsigned char far *)MK_FP(0xF000, 0xFA6E); /* ancien chemin */
+
+    fontHigh = biosFont8x8(4);
+    if (!fontHigh)
+        fontHigh = upperFont(); /* ancien chemin : INT 1Fh, peut valoir 0 */
+}
+
 /* Texte dans le back-buffer avec les polices 8x8 du BIOS :
    0..127 en ROM (F000:FA6E), 128..255 via INT 1Fh (accents CP437/850) */
 void drawText(int x, int y, const char *str, unsigned char color)
 {
-    unsigned char far *lowFont = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
-    unsigned char far *highFont = upperFont();
     unsigned char far *glyph;
     int row, bit, px, py;
     unsigned char bits, ch;
@@ -659,11 +692,11 @@ void drawText(int x, int y, const char *str, unsigned char color)
     {
         ch = (unsigned char)*str;
         if (ch < 128)
-            glyph = lowFont + (unsigned)ch * 8;
-        else if (highFont)
-            glyph = highFont + (unsigned)(ch - 128) * 8;
+            glyph = fontLow + (unsigned)ch * 8;
+        else if (fontHigh)
+            glyph = fontHigh + (unsigned)(ch - 128) * 8;
         else
-            glyph = lowFont + (unsigned)'?' * 8;
+            glyph = fontLow + (unsigned)'?' * 8;
 
         for (row = 0; row < 8; row++)
         {
@@ -677,7 +710,7 @@ void drawText(int x, int y, const char *str, unsigned char color)
                 {
                     px = x + bit;
                     if (px >= 0 && px < 320)
-                        backBuffer[(long)py * 320L + px] = color;
+                        backBuffer[rowOffset[py] + px] = color;
                 }
             }
         }
@@ -690,8 +723,6 @@ void drawText(int x, int y, const char *str, unsigned char color)
    dessine directement dans le back-buffer. Pour les titres. */
 void drawTextScaled(int x, int y, const char *str, unsigned char color, int scale)
 {
-    unsigned char far *lowFont = (unsigned char far *)MK_FP(0xF000, 0xFA6E);
-    unsigned char far *highFont = upperFont();
     unsigned char far *glyph;
     int row, bit, x0, y0;
     unsigned char bits, ch;
@@ -700,11 +731,11 @@ void drawTextScaled(int x, int y, const char *str, unsigned char color, int scal
     {
         ch = (unsigned char)*str;
         if (ch < 128)
-            glyph = lowFont + (unsigned)ch * 8;
-        else if (highFont)
-            glyph = highFont + (unsigned)(ch - 128) * 8;
+            glyph = fontLow + (unsigned)ch * 8;
+        else if (fontHigh)
+            glyph = fontHigh + (unsigned)(ch - 128) * 8;
         else
-            glyph = lowFont + (unsigned)'?' * 8;
+            glyph = fontLow + (unsigned)'?' * 8;
 
         for (row = 0; row < 8; row++)
         {

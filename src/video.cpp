@@ -50,8 +50,13 @@ void closeMode13h()
 
 void waitVSync()
 {
+    unsigned long far *ticks = (unsigned long far *)MK_FP(0x40, 0x6C);
+    unsigned long t0 = *ticks;
+
     while (inportb(0x3DA) & 0x08)
-        ;
+        if (*ticks - t0 > 2)
+            return;
     while (!(inportb(0x3DA) & 0x08))
-        ;
+        if (*ticks - t0 > 2)
+            return;
 }

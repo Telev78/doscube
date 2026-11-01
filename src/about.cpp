@@ -21,6 +21,8 @@
 #define CLOSE_Y1 23
 #define IN_CLOSE(x, y) ((x) >= CLOSE_X0 && (x) <= CLOSE_X1 && (y) >= CLOSE_Y0 && (y) <= CLOSE_Y1)
 
+extern volatile int quitRequested;
+
 static void centerText(int y, const char *s, unsigned char color)
 {
     drawText((320 - (int)strlen(s) * 8) / 2, y, s, color);
@@ -96,7 +98,7 @@ void showAbout()
     lastX = px;
     lastY = py;
 
-    while (!done)
+    while (!done && !quitRequested)
     {
         getMouseStatus(mx, my, left, right);
         px = mx / 2;
@@ -215,7 +217,7 @@ int confirmQuit()
     lastX = px;
     lastY = py;
 
-    while (result < 0)
+    while (result < 0 && !quitRequested)
     {
         getMouseStatus(mx, my, left, right);
         px = mx / 2;
@@ -276,6 +278,9 @@ int confirmQuit()
             lastY = py;
         }
     }
+
+    if (result < 0)
+        result = 1; // Ctrl+Break : on quitte sans redemander
 
     do
     {

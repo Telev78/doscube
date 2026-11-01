@@ -24,8 +24,7 @@ struct Point3D
 // 3. Structure d'une pièce individuelle (cubie)
 struct Cubie
 {
-    Point3D currentPos;  // Position actuelle (-1, 0, 1)
-    Point3D originalPos; // Position cible (état résolu)
+    Point3D currentPos; // Position actuelle (-1, 0, 1)
 
     // Couleurs des 6 faces locales :
     // [0]: Haut, [1]: Bas, [2]: Gauche, [3]: Droite, [4]: Avant, [5]: Arrière
@@ -36,12 +35,7 @@ struct Cubie
 struct RubikCube
 {
     Cubie pieces[26];       // 8 coins + 12 arêtes + 6 centres
-    unsigned int moveCount; // Nombre de rotations effectuées
-    int isMixed;            // Status du mélange (0: résolu, 1: mélangé)
-
-    unsigned long startTime;   // Horodatage du début
-    unsigned long elapsedTime; // Temps écoulé
-    int timerRunning;          // État du chrono (0: pause, 1: en cours)
+    unsigned int moveCount; // Coups du joueur : tenu par l'appelant (rotateLayer n'y touche pas)
 };
 
 /* Axe (0=X, 1=Y, 2=Z) et sens (+1/-1) de la normale de chacune des 6 faces :
@@ -50,10 +44,7 @@ extern const int faceAxis[6];
 extern const int faceSign[6];
 
 void initCube(RubikCube &cube);
-// Fonctions de rotation des faces
-void rotateX(RubikCube &cube, int targetX, int clockwise);
-void rotateY(RubikCube &cube, int targetY, int clockwise);
-void rotateZ(RubikCube &cube, int targetZ, int clockwise);
+
 struct LayerAnim
 {
     int active;
@@ -63,6 +54,9 @@ struct LayerAnim
     int step;
     int steps;
 };
+
+// axis : 0=X 1=Y 2=Z ; layer : -1, 0 ou 1 ; sign : +1 = +90° règle de la main droite
+// autour de +axis, -1 = -90°. Ne modifie pas moveCount.
 void rotateLayer(RubikCube &cube, int axis, int layer, int sign);
 int isSolved(const RubikCube &cube);
 void randomMove(int lastAxis, int lastLayer, int &axis, int &layer, int &sign);

@@ -3,7 +3,7 @@
 
 /* Identite du programme */
 #define APP_NAME "DosCube"
-#define APP_VERSION "1.0"
+#define APP_VERSION "1.1"
 #define APP_AUTHOR "(c) Telev"
 
 /* Nom du programme affiche dans l'aide (adapter au nom de l'executable) */
